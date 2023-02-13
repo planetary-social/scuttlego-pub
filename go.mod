@@ -1,6 +1,6 @@
 module github.com/planetary-social/scuttlego-pub
 
-go 1.20
+go 1.19
 
 require (
 	github.com/boreq/errors v0.1.0
