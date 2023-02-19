@@ -7,7 +7,6 @@ import (
 	"github.com/planetary-social/scuttlego/service/app/commands"
 )
 
-//nolint:unused
 var migrationsSet = wire.NewSet(
 	migrations.NewRunner,
 	wire.Bind(new(commands.MigrationsRunner), new(*migrations.Runner)),
