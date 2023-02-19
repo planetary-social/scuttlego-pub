@@ -11,16 +11,12 @@ import (
 	"github.com/dgraph-io/badger/v3"
 	"github.com/google/wire"
 	"github.com/planetary-social/scuttlego-pub/service"
-	"github.com/planetary-social/scuttlego/fixtures"
 	"github.com/planetary-social/scuttlego/logging"
 	badgeradapters "github.com/planetary-social/scuttlego/service/adapters/badger"
 	"github.com/planetary-social/scuttlego/service/adapters/badger/notx"
 	"github.com/planetary-social/scuttlego/service/app/commands"
+	"github.com/planetary-social/scuttlego/service/app/queries"
 	"github.com/planetary-social/scuttlego/service/domain"
-	blobReplication "github.com/planetary-social/scuttlego/service/domain/blobs/replication"
-	"github.com/planetary-social/scuttlego/service/domain/feeds/content/transport"
-	"github.com/planetary-social/scuttlego/service/domain/feeds/formats"
-	"github.com/planetary-social/scuttlego/service/domain/graph"
 	"github.com/planetary-social/scuttlego/service/domain/identity"
 	"github.com/planetary-social/scuttlego/service/domain/network/local"
 	"github.com/planetary-social/scuttlego/service/domain/replication"
@@ -31,30 +27,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var hops = graph.MustNewHops(0)
-
-func buildTestBadgerNoTxTxAdapters(*badger.Txn, badgeradapters.TestAdaptersDependencies) (notx.TxAdapters, error) {
-	wire.Build(
-		wire.Struct(new(notx.TxAdapters), "*"),
-
-		badgerRepositoriesSet,
-		badgerUnpackTestDependenciesSet,
-
-		formats.NewDefaultMessageHMAC,
-		formats.NewScuttlebutt,
-		transport.DefaultMappings,
-
-		transport.NewMarshaler,
-		wire.Bind(new(formats.Marshaler), new(*transport.Marshaler)),
-
-		fixtures.SomeLogger,
-
-		wire.Value(hops),
-	)
-
-	return notx.TxAdapters{}, nil
-}
-
 func buildBadgerNoTxTxAdapters(*badger.Txn, identity.Public, service.Config, logging.Logger) (notx.TxAdapters, error) {
 	wire.Build(
 		wire.Struct(new(notx.TxAdapters), "*"),
@@ -63,36 +35,13 @@ func buildBadgerNoTxTxAdapters(*badger.Txn, identity.Public, service.Config, log
 		formatsSet,
 		extractFromConfigSet,
 		adaptersSet,
-
-		wire.Value(hops),
+		contentSet,
 	)
 
 	return notx.TxAdapters{}, nil
 }
 
-func buildBadgerTestAdapters(*badger.Txn, badgeradapters.TestAdaptersDependencies) (badgeradapters.TestAdapters, error) {
-	wire.Build(
-		wire.Struct(new(badgeradapters.TestAdapters), "*"),
-
-		badgerRepositoriesSet,
-		badgerUnpackTestDependenciesSet,
-
-		formats.NewDefaultMessageHMAC,
-		formats.NewScuttlebutt,
-		transport.DefaultMappings,
-
-		transport.NewMarshaler,
-		wire.Bind(new(formats.Marshaler), new(*transport.Marshaler)),
-
-		fixtures.SomeLogger,
-
-		wire.Value(hops),
-	)
-
-	return badgeradapters.TestAdapters{}, nil
-}
-
-func buildBadgerTransactableAdapters(*badger.Txn, identity.Public, service.Config, logging.Logger) (commands.Adapters, error) {
+func buildBadgerCommandsAdapters(*badger.Txn, identity.Public, service.Config, logging.Logger) (commands.Adapters, error) {
 	wire.Build(
 		wire.Struct(new(commands.Adapters), "*"),
 
@@ -100,11 +49,24 @@ func buildBadgerTransactableAdapters(*badger.Txn, identity.Public, service.Confi
 		formatsSet,
 		extractFromConfigSet,
 		adaptersSet,
-
-		wire.Value(hops),
+		contentSet,
 	)
 
 	return commands.Adapters{}, nil
+}
+
+func buildBadgerQueriesAdapters(*badger.Txn, identity.Public, service.Config, logging.Logger) (queries.Adapters, error) {
+	wire.Build(
+		wire.Struct(new(queries.Adapters), "*"),
+
+		badgerRepositoriesSet,
+		formatsSet,
+		extractFromConfigSet,
+		adaptersSet,
+		contentSet,
+	)
+
+	return queries.Adapters{}, nil
 }
 
 // BuildService creates a new service which uses the provided context as a long-term context used as a base context for
@@ -156,6 +118,7 @@ func BuildService(context.Context, identity.Private, service.Config) (service.Se
 		extractFromConfigSet,
 		networkingSet,
 		migrationsSet,
+		contentSet,
 	)
 	return service.Service{}, nil, nil
 }
@@ -183,21 +146,6 @@ var replicatorSet = wire.NewSet(
 
 	replication.NewNegotiator,
 	wire.Bind(new(domain.MessageReplicator), new(*replication.Negotiator)),
-)
-
-var blobReplicatorSet = wire.NewSet(
-	blobReplication.NewManager,
-	wire.Bind(new(blobReplication.ReplicationManager), new(*blobReplication.Manager)),
-	wire.Bind(new(commands.BlobReplicationManager), new(*blobReplication.Manager)),
-
-	blobReplication.NewReplicator,
-	wire.Bind(new(domain.BlobReplicator), new(*blobReplication.Replicator)),
-
-	blobReplication.NewBlobsGetDownloader,
-	wire.Bind(new(blobReplication.Downloader), new(*blobReplication.BlobsGetDownloader)),
-
-	blobReplication.NewHasHandler,
-	wire.Bind(new(blobReplication.HasBlobHandler), new(*blobReplication.HasHandler)),
 )
 
 func newAdvertiser(l identity.Public, config service.Config) (*local.Advertiser, error) {

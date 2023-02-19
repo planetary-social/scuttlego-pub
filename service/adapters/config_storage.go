@@ -8,6 +8,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 	"github.com/planetary-social/scuttlego-pub/service"
 	"github.com/planetary-social/scuttlego/service/domain/feeds/formats"
+	"github.com/planetary-social/scuttlego/service/domain/graph"
 	"github.com/planetary-social/scuttlego/service/domain/transport/boxstream"
 )
 
@@ -25,6 +26,7 @@ func (s *ConfigStorage) Save(config service.Config) error {
 		ListenAddress: config.ListenAddress,
 		NetworkKey:    config.NetworkKey.Bytes(),
 		MessageHMAC:   config.MessageHMAC.Bytes(),
+		Hops:          config.Hops.Int(),
 	}
 
 	f, err := os.OpenFile(s.configFilePath(), os.O_WRONLY|os.O_CREATE, 0o700)
@@ -61,11 +63,17 @@ func (s *ConfigStorage) Load() (service.Config, error) {
 		return service.Config{}, errors.Wrap(err, "error creating message HMAC")
 	}
 
+	hops, err := graph.NewHops(storedConfig.Hops)
+	if err != nil {
+		return service.Config{}, errors.Wrap(err, "error creating hops")
+	}
+
 	config := service.Config{
 		DataDirectory: storedConfig.DataDirectory,
 		ListenAddress: storedConfig.ListenAddress,
 		NetworkKey:    networkKey,
 		MessageHMAC:   messageHMAC,
+		Hops:          hops,
 	}
 
 	return config, nil
@@ -80,4 +88,5 @@ type storedConfig struct {
 	ListenAddress string `toml:"listen_address" comment:"Listen address for the Secure Scuttlebutt RPC TCP listener in the format accepted by the Go programming language standard library."`
 	NetworkKey    []byte `toml:"network_key" comment:"Secure Scuttlebutt network key. Used to create networks separate from the Secure Scuttlebutt mainnet."`
 	MessageHMAC   []byte `toml:"message_hmac" comment:"Secure Scuttlebutt message HMAC. Used mostly for testing to make messages incompatibile with the Secure Scuttlebutt mainnet."`
+	Hops          int    `toml:"hops" comment:"Distance of replicated feeds in the social graph. For example if this is set to 1 then only people followed by the pub are replicated. If it is set to 2 then also people who those people follow are replicated."`
 }
