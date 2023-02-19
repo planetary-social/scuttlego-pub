@@ -3,9 +3,10 @@ package di
 import (
 	"github.com/google/wire"
 	"github.com/planetary-social/scuttlego-pub/service/app"
+	"github.com/planetary-social/scuttlego-pub/service/app/commands"
 	ebtadapters "github.com/planetary-social/scuttlego/service/adapters/ebt"
 	scuttlegoapp "github.com/planetary-social/scuttlego/service/app"
-	"github.com/planetary-social/scuttlego/service/app/commands"
+	scuttlegocommands "github.com/planetary-social/scuttlego/service/app/commands"
 	"github.com/planetary-social/scuttlego/service/app/queries"
 	"github.com/planetary-social/scuttlego/service/domain/replication"
 	"github.com/planetary-social/scuttlego/service/ports/network"
@@ -22,6 +23,9 @@ var applicationSet = wire.NewSet(
 
 var commandsSet = wire.NewSet(
 	wire.Struct(new(app.Commands), "*"),
+
+	commands.NewRedeemInviteHandler,
+	commands.NewCreateInviteHandler,
 )
 
 var queriesSet = wire.NewSet(
@@ -36,44 +40,44 @@ var scuttlegoApplicationSet = wire.NewSet(
 var scuttlegoCommandsSet = wire.NewSet(
 	wire.Struct(new(scuttlegoapp.Commands), "*"),
 
-	commands.NewRedeemInviteHandler,
-	commands.NewFollowHandler,
-	commands.NewConnectHandler,
-	commands.NewDisconnectAllHandler,
-	commands.NewPublishRawHandler,
-	commands.NewPublishRawAsIdentityHandler,
-	commands.NewDownloadBlobHandler,
-	commands.NewCreateBlobHandler,
-	commands.NewDownloadFeedHandler,
-	commands.NewRoomsAliasRegisterHandler,
-	commands.NewRoomsAliasRevokeHandler,
-	commands.NewAddToBanListHandler,
-	commands.NewRemoveFromBanListHandler,
-	commands.NewRunMigrationsHandler,
+	scuttlegocommands.NewRedeemInviteHandler,
+	scuttlegocommands.NewFollowHandler,
+	scuttlegocommands.NewConnectHandler,
+	scuttlegocommands.NewDisconnectAllHandler,
+	scuttlegocommands.NewPublishRawHandler,
+	scuttlegocommands.NewPublishRawAsIdentityHandler,
+	scuttlegocommands.NewDownloadBlobHandler,
+	scuttlegocommands.NewCreateBlobHandler,
+	scuttlegocommands.NewDownloadFeedHandler,
+	scuttlegocommands.NewRoomsAliasRegisterHandler,
+	scuttlegocommands.NewRoomsAliasRevokeHandler,
+	scuttlegocommands.NewAddToBanListHandler,
+	scuttlegocommands.NewRemoveFromBanListHandler,
+	scuttlegocommands.NewRunMigrationsHandler,
 
-	commands.NewProcessNewLocalDiscoveryHandler,
-	wire.Bind(new(network.ProcessNewLocalDiscoveryCommandHandler), new(*commands.ProcessNewLocalDiscoveryHandler)),
+	scuttlegocommands.NewProcessNewLocalDiscoveryHandler,
+	wire.Bind(new(network.ProcessNewLocalDiscoveryCommandHandler), new(*scuttlegocommands.ProcessNewLocalDiscoveryHandler)),
 
-	commands.NewAcceptNewPeerHandler,
-	wire.Bind(new(network.AcceptNewPeerCommandHandler), new(*commands.AcceptNewPeerHandler)),
+	scuttlegocommands.NewAcceptNewPeerHandler,
+	wire.Bind(new(network.AcceptNewPeerCommandHandler), new(*scuttlegocommands.AcceptNewPeerHandler)),
 
-	commands.NewEstablishNewConnectionsHandler,
-	wire.Bind(new(network.EstablishNewConnectionsCommandHandler), new(*commands.EstablishNewConnectionsHandler)),
+	scuttlegocommands.NewEstablishNewConnectionsHandler,
+	wire.Bind(new(network.EstablishNewConnectionsCommandHandler), new(*scuttlegocommands.EstablishNewConnectionsHandler)),
 
-	commands.NewRawMessageHandler,
-	wire.Bind(new(replication.RawMessageHandler), new(*commands.RawMessageHandler)),
+	scuttlegocommands.NewRawMessageHandler,
+	wire.Bind(new(replication.RawMessageHandler), new(*scuttlegocommands.RawMessageHandler)),
 
-	commands.NewCreateWantsHandler,
-	wire.Bind(new(portsrpc.CreateWantsCommandHandler), new(*commands.CreateWantsHandler)),
+	scuttlegocommands.NewCreateWantsHandler,
+	wire.Bind(new(portsrpc.CreateWantsCommandHandler), new(*scuttlegocommands.CreateWantsHandler)),
 
-	commands.NewHandleIncomingEbtReplicateHandler,
-	wire.Bind(new(portsrpc.EbtReplicateCommandHandler), new(*commands.HandleIncomingEbtReplicateHandler)),
+	scuttlegocommands.NewHandleIncomingEbtReplicateHandler,
+	wire.Bind(new(portsrpc.EbtReplicateCommandHandler), new(*scuttlegocommands.HandleIncomingEbtReplicateHandler)),
 
-	commands.NewProcessRoomAttendantEventHandler,
-	wire.Bind(new(pubsub.ProcessRoomAttendantEventHandler), new(*commands.ProcessRoomAttendantEventHandler)),
+	scuttlegocommands.NewProcessRoomAttendantEventHandler,
+	wire.Bind(new(pubsub.ProcessRoomAttendantEventHandler), new(*scuttlegocommands.ProcessRoomAttendantEventHandler)),
 
-	commands.NewAcceptTunnelConnectHandler,
-	wire.Bind(new(portsrpc.AcceptTunnelConnectHandler), new(*commands.AcceptTunnelConnectHandler)),
+	scuttlegocommands.NewAcceptTunnelConnectHandler,
+	wire.Bind(new(portsrpc.AcceptTunnelConnectHandler), new(*scuttlegocommands.AcceptTunnelConnectHandler)),
 )
 
 var scuttlegoQueriesSet = wire.NewSet(

@@ -11,11 +11,12 @@ import (
 	"github.com/dgraph-io/badger/v3"
 	"github.com/google/wire"
 	"github.com/planetary-social/scuttlego-pub/service"
+	"github.com/planetary-social/scuttlego-pub/service/app/commands"
 	"github.com/planetary-social/scuttlego/logging"
 	badgeradapters "github.com/planetary-social/scuttlego/service/adapters/badger"
 	"github.com/planetary-social/scuttlego/service/adapters/badger/notx"
-	"github.com/planetary-social/scuttlego/service/app/commands"
-	"github.com/planetary-social/scuttlego/service/app/queries"
+	scuttlegocommands "github.com/planetary-social/scuttlego/service/app/commands"
+	scuttlegoqueries "github.com/planetary-social/scuttlego/service/app/queries"
 	"github.com/planetary-social/scuttlego/service/domain"
 	"github.com/planetary-social/scuttlego/service/domain/identity"
 	"github.com/planetary-social/scuttlego/service/domain/network/local"
@@ -41,7 +42,35 @@ func buildBadgerNoTxTxAdapters(*badger.Txn, identity.Public, service.Config, log
 	return notx.TxAdapters{}, nil
 }
 
-func buildBadgerCommandsAdapters(*badger.Txn, identity.Public, service.Config, logging.Logger) (commands.Adapters, error) {
+func buildBadgerScuttlegoCommandsAdapters(*badger.Txn, identity.Public, service.Config, logging.Logger) (scuttlegocommands.Adapters, error) {
+	wire.Build(
+		wire.Struct(new(scuttlegocommands.Adapters), "*"),
+
+		badgerRepositoriesSet,
+		formatsSet,
+		extractFromConfigSet,
+		adaptersSet,
+		contentSet,
+	)
+
+	return scuttlegocommands.Adapters{}, nil
+}
+
+func buildBadgerScuttlegoQueriesAdapters(*badger.Txn, identity.Public, service.Config, logging.Logger) (scuttlegoqueries.Adapters, error) {
+	wire.Build(
+		wire.Struct(new(scuttlegoqueries.Adapters), "*"),
+
+		badgerRepositoriesSet,
+		formatsSet,
+		extractFromConfigSet,
+		adaptersSet,
+		contentSet,
+	)
+
+	return scuttlegoqueries.Adapters{}, nil
+}
+
+func buildBadgerPubCommandsAdapters(*badger.Txn, identity.Public, service.Config, logging.Logger) (commands.Adapters, error) {
 	wire.Build(
 		wire.Struct(new(commands.Adapters), "*"),
 
@@ -55,20 +84,6 @@ func buildBadgerCommandsAdapters(*badger.Txn, identity.Public, service.Config, l
 	return commands.Adapters{}, nil
 }
 
-func buildBadgerQueriesAdapters(*badger.Txn, identity.Public, service.Config, logging.Logger) (queries.Adapters, error) {
-	wire.Build(
-		wire.Struct(new(queries.Adapters), "*"),
-
-		badgerRepositoriesSet,
-		formatsSet,
-		extractFromConfigSet,
-		adaptersSet,
-		contentSet,
-	)
-
-	return queries.Adapters{}, nil
-}
-
 // BuildService creates a new service which uses the provided context as a long-term context used as a base context for
 // e.g. established connections.
 func BuildService(context.Context, identity.Private, service.Config) (service.Service, func(), error) {
@@ -76,15 +91,15 @@ func BuildService(context.Context, identity.Private, service.Config) (service.Se
 		service.NewService,
 
 		domain.NewPeerManager,
-		wire.Bind(new(commands.NewPeerHandler), new(*domain.PeerManager)),
-		wire.Bind(new(commands.PeerManager), new(*domain.PeerManager)),
+		wire.Bind(new(scuttlegocommands.NewPeerHandler), new(*domain.PeerManager)),
+		wire.Bind(new(scuttlegocommands.PeerManager), new(*domain.PeerManager)),
 
 		newBadger,
 
 		newAdvertiser,
 		privateIdentityToPublicIdentity,
 
-		commands.NewMessageBuffer,
+		scuttlegocommands.NewMessageBuffer,
 
 		rooms.NewScanner,
 		wire.Bind(new(domain.RoomScanner), new(*rooms.Scanner)),

@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/wire"
 	"github.com/planetary-social/scuttlego-pub/service"
+	pubcommands "github.com/planetary-social/scuttlego-pub/service/app/commands"
 	"github.com/planetary-social/scuttlego/logging"
 	"github.com/planetary-social/scuttlego/service/adapters"
 	"github.com/planetary-social/scuttlego/service/adapters/badger"
@@ -38,6 +39,7 @@ var adaptersSet = wire.NewSet(
 	wire.Bind(new(boxstream.CurrentTimeProvider), new(*adapters.CurrentTimeProvider)),
 	wire.Bind(new(invitesadapters.CurrentTimeProvider), new(*adapters.CurrentTimeProvider)),
 	wire.Bind(new(blobreplication.CurrentTimeProvider), new(*adapters.CurrentTimeProvider)),
+	wire.Bind(new(pubcommands.CurrentTimeProvider), new(*adapters.CurrentTimeProvider)),
 
 	adapters.NewBanListHasher,
 	wire.Bind(new(badger.BanListHasher), new(*adapters.BanListHasher)),

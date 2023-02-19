@@ -14,7 +14,10 @@ import (
 	"github.com/dgraph-io/badger/v3"
 	"github.com/google/wire"
 	"github.com/planetary-social/scuttlego-pub/service"
+	badger3 "github.com/planetary-social/scuttlego-pub/service/adapters/badger"
 	"github.com/planetary-social/scuttlego-pub/service/app"
+	commands2 "github.com/planetary-social/scuttlego-pub/service/app/commands"
+	"github.com/planetary-social/scuttlego-pub/service/domain/messages/transport"
 	"github.com/planetary-social/scuttlego/logging"
 	migrations2 "github.com/planetary-social/scuttlego/migrations"
 	"github.com/planetary-social/scuttlego/service/adapters"
@@ -29,7 +32,7 @@ import (
 	"github.com/planetary-social/scuttlego/service/domain/blobs"
 	replication2 "github.com/planetary-social/scuttlego/service/domain/blobs/replication"
 	"github.com/planetary-social/scuttlego/service/domain/feeds/content"
-	"github.com/planetary-social/scuttlego/service/domain/feeds/content/transport"
+	transport2 "github.com/planetary-social/scuttlego/service/domain/feeds/content/transport"
 	"github.com/planetary-social/scuttlego/service/domain/feeds/formats"
 	"github.com/planetary-social/scuttlego/service/domain/identity"
 	"github.com/planetary-social/scuttlego/service/domain/network"
@@ -39,7 +42,7 @@ import (
 	"github.com/planetary-social/scuttlego/service/domain/replication/gossip"
 	"github.com/planetary-social/scuttlego/service/domain/rooms"
 	"github.com/planetary-social/scuttlego/service/domain/rooms/tunnel"
-	transport2 "github.com/planetary-social/scuttlego/service/domain/transport"
+	transport3 "github.com/planetary-social/scuttlego/service/domain/transport"
 	"github.com/planetary-social/scuttlego/service/domain/transport/boxstream"
 	"github.com/planetary-social/scuttlego/service/domain/transport/rpc"
 	"github.com/planetary-social/scuttlego/service/domain/transport/rpc/mux"
@@ -58,8 +61,8 @@ func buildBadgerNoTxTxAdapters(txn *badger.Txn, public identity.Public, config s
 	currentTimeProvider := adapters.NewCurrentTimeProvider()
 	blobWantListRepository := badger2.NewBlobWantListRepository(txn, currentTimeProvider)
 	feedWantListRepository := badger2.NewFeedWantListRepository(txn, currentTimeProvider)
-	messageContentMappings := transport.DefaultMappings()
-	marshaler, err := transport.NewMarshaler(messageContentMappings, logger)
+	messageContentMappings := transport.Mappings()
+	marshaler, err := transport2.NewMarshaler(messageContentMappings, logger)
 	if err != nil {
 		return notx.TxAdapters{}, err
 	}
@@ -91,13 +94,13 @@ func buildBadgerNoTxTxAdapters(txn *badger.Txn, public identity.Public, config s
 	return txAdapters, nil
 }
 
-func buildBadgerCommandsAdapters(txn *badger.Txn, public identity.Public, config service.Config, logger logging.Logger) (commands.Adapters, error) {
+func buildBadgerScuttlegoCommandsAdapters(txn *badger.Txn, public identity.Public, config service.Config, logger logging.Logger) (commands.Adapters, error) {
 	hops := extractHopsFromConfig(config)
 	banListHasher := adapters.NewBanListHasher()
 	banListRepository := badger2.NewBanListRepository(txn, banListHasher)
 	socialGraphRepository := badger2.NewSocialGraphRepository(txn, public, hops, banListRepository)
-	messageContentMappings := transport.DefaultMappings()
-	marshaler, err := transport.NewMarshaler(messageContentMappings, logger)
+	messageContentMappings := transport.Mappings()
+	marshaler, err := transport2.NewMarshaler(messageContentMappings, logger)
 	if err != nil {
 		return commands.Adapters{}, err
 	}
@@ -126,13 +129,13 @@ func buildBadgerCommandsAdapters(txn *badger.Txn, public identity.Public, config
 	return commandsAdapters, nil
 }
 
-func buildBadgerQueriesAdapters(txn *badger.Txn, public identity.Public, config service.Config, logger logging.Logger) (queries.Adapters, error) {
+func buildBadgerScuttlegoQueriesAdapters(txn *badger.Txn, public identity.Public, config service.Config, logger logging.Logger) (queries.Adapters, error) {
 	hops := extractHopsFromConfig(config)
 	banListHasher := adapters.NewBanListHasher()
 	banListRepository := badger2.NewBanListRepository(txn, banListHasher)
 	socialGraphRepository := badger2.NewSocialGraphRepository(txn, public, hops, banListRepository)
-	messageContentMappings := transport.DefaultMappings()
-	marshaler, err := transport.NewMarshaler(messageContentMappings, logger)
+	messageContentMappings := transport.Mappings()
+	marshaler, err := transport2.NewMarshaler(messageContentMappings, logger)
 	if err != nil {
 		return queries.Adapters{}, err
 	}
@@ -155,20 +158,65 @@ func buildBadgerQueriesAdapters(txn *badger.Txn, public identity.Public, config 
 	return queriesAdapters, nil
 }
 
+func buildBadgerPubCommandsAdapters(txn *badger.Txn, public identity.Public, config service.Config, logger logging.Logger) (commands2.Adapters, error) {
+	hops := extractHopsFromConfig(config)
+	banListHasher := adapters.NewBanListHasher()
+	banListRepository := badger2.NewBanListRepository(txn, banListHasher)
+	socialGraphRepository := badger2.NewSocialGraphRepository(txn, public, hops, banListRepository)
+	inviteRepository := badger3.NewInviteRepository()
+	messageContentMappings := transport.Mappings()
+	marshaler, err := transport2.NewMarshaler(messageContentMappings, logger)
+	if err != nil {
+		return commands2.Adapters{}, err
+	}
+	scanner := blobs.NewScanner()
+	parser := content.NewParser(marshaler, scanner)
+	messageHMAC := extractMessageHMACFromConfig(config)
+	scuttlebutt := formats.NewScuttlebutt(parser, messageHMAC)
+	v := newFormats(scuttlebutt)
+	rawMessageIdentifier := formats.NewRawMessageIdentifier(v)
+	messageRepository := badger2.NewMessageRepository(txn, rawMessageIdentifier)
+	receiveLogRepository := badger2.NewReceiveLogRepository(txn, messageRepository)
+	pubRepository := badger2.NewPubRepository(txn)
+	blobRepository := badger2.NewBlobRepository(txn)
+	feedRepository := badger2.NewFeedRepository(txn, socialGraphRepository, receiveLogRepository, messageRepository, pubRepository, blobRepository, banListRepository, scuttlebutt)
+	commandsAdapters := commands2.Adapters{
+		SocialGraph: socialGraphRepository,
+		Invite:      inviteRepository,
+		Feed:        feedRepository,
+	}
+	return commandsAdapters, nil
+}
+
 // BuildService creates a new service which uses the provided context as a long-term context used as a base context for
 // e.g. established connections.
 func BuildService(contextContext context.Context, private identity.Private, config service.Config) (service.Service, func(), error) {
-	appCommands := app.Commands{}
-	appQueries := app.Queries{}
-	application := app.Application{
-		Commands: appCommands,
-		Queries:  appQueries,
-	}
 	logrusLoggingSystem := newLoggingSystem()
 	logger := newContextLogger(logrusLoggingSystem)
 	db, cleanup, err := newBadger(logrusLoggingSystem, logger, config)
 	if err != nil {
 		return service.Service{}, nil, err
+	}
+	public := privateIdentityToPublicIdentity(private)
+	commandsAdaptersFactory := badgerPubCommandsAdaptersFactory(config, public, logger)
+	commandsTransactionProvider := badger3.NewCommandsTransactionProvider(db, commandsAdaptersFactory)
+	createInviteHandler := commands2.NewCreateInviteHandler(commandsTransactionProvider)
+	currentTimeProvider := adapters.NewCurrentTimeProvider()
+	messageContentMappings := transport.Mappings()
+	marshaler, err := transport2.NewMarshaler(messageContentMappings, logger)
+	if err != nil {
+		cleanup()
+		return service.Service{}, nil, err
+	}
+	redeemInviteHandler := commands2.NewRedeemInviteHandler(commandsTransactionProvider, currentTimeProvider, marshaler, private)
+	appCommands := app.Commands{
+		CreateInvite: createInviteHandler,
+		RedeemInvite: redeemInviteHandler,
+	}
+	appQueries := app.Queries{}
+	application := app.Application{
+		Commands: appCommands,
+		Queries:  appQueries,
 	}
 	badgerStorage := migrations.NewBadgerStorage(db)
 	runner := migrations2.NewRunner(badgerStorage, logger)
@@ -180,7 +228,6 @@ func BuildService(contextContext context.Context, private identity.Private, conf
 	}
 	runMigrationsHandler := commands.NewRunMigrationsHandler(runner, migrationsMigrations)
 	networkKey := extractNetworkKeyFromConfig(config)
-	currentTimeProvider := adapters.NewCurrentTimeProvider()
 	handshaker, err := boxstream.NewHandshaker(private, networkKey, currentTimeProvider)
 	if err != nil {
 		cleanup()
@@ -188,7 +235,7 @@ func BuildService(contextContext context.Context, private identity.Private, conf
 	}
 	requestPubSub := pubsub.NewRequestPubSub()
 	connectionIdGenerator := rpc.NewConnectionIdGenerator()
-	peerInitializer := transport2.NewPeerInitializer(handshaker, requestPubSub, connectionIdGenerator, logger)
+	peerInitializer := transport3.NewPeerInitializer(handshaker, requestPubSub, connectionIdGenerator, logger)
 	peerManagerConfig := newPeerManagerConfig()
 	dialer, err := network.NewDialer(peerInitializer, logger)
 	if err != nil {
@@ -197,28 +244,21 @@ func BuildService(contextContext context.Context, private identity.Private, conf
 	}
 	tunnelDialer := tunnel.NewDialer(peerInitializer)
 	sessionTracker := ebt.NewSessionTracker()
-	messageContentMappings := transport.DefaultMappings()
-	marshaler, err := transport.NewMarshaler(messageContentMappings, logger)
-	if err != nil {
-		cleanup()
-		return service.Service{}, nil, err
-	}
 	scanner := blobs.NewScanner()
 	parser := content.NewParser(marshaler, scanner)
 	messageHMAC := extractMessageHMACFromConfig(config)
 	scuttlebutt := formats.NewScuttlebutt(parser, messageHMAC)
 	v2 := newFormats(scuttlebutt)
 	rawMessageIdentifier := formats.NewRawMessageIdentifier(v2)
-	public := privateIdentityToPublicIdentity(private)
-	commandsAdaptersFactory := badgerCommandsAdaptersFactory(config, public, logger)
-	commandsTransactionProvider := badger2.NewCommandsTransactionProvider(db, commandsAdaptersFactory)
-	messageBuffer := commands.NewMessageBuffer(commandsTransactionProvider, logger)
+	badgerCommandsAdaptersFactory := badgerScuttlegoCommandsAdaptersFactory(config, public, logger)
+	badgerCommandsTransactionProvider := badger2.NewCommandsTransactionProvider(db, badgerCommandsAdaptersFactory)
+	messageBuffer := commands.NewMessageBuffer(badgerCommandsTransactionProvider, logger)
 	rawMessageHandler := commands.NewRawMessageHandler(rawMessageIdentifier, messageBuffer, logger)
 	txAdaptersFactory := noTxTxAdaptersFactory(public, config, logger)
 	txAdaptersFactoryTransactionProvider := notx.NewTxAdaptersFactoryTransactionProvider(db, txAdaptersFactory)
 	noTxWantedFeedsRepository := notx.NewNoTxWantedFeedsRepository(txAdaptersFactoryTransactionProvider)
 	wantedFeedsCache := replication.NewWantedFeedsCache(noTxWantedFeedsRepository)
-	queriesAdaptersFactory := badgerQueriesAdaptersFactory(config, public, logger)
+	queriesAdaptersFactory := badgerScuttlegoQueriesAdaptersFactory(config, public, logger)
 	queriesTransactionProvider := badger2.NewQueriesTransactionProvider(db, queriesAdaptersFactory)
 	messagePubSub := pubsub.NewMessagePubSub()
 	createHistoryStreamHandler := queries.NewCreateHistoryStreamHandler(queriesTransactionProvider, messagePubSub, logger)
