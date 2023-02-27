@@ -13,7 +13,6 @@ import (
 	scuttlegoqueries "github.com/planetary-social/scuttlego/service/app/queries"
 	blobReplication "github.com/planetary-social/scuttlego/service/domain/blobs/replication"
 	"github.com/planetary-social/scuttlego/service/domain/identity"
-	"github.com/planetary-social/scuttlego/service/domain/replication"
 )
 
 var badgerAdaptersSet = wire.NewSet(
@@ -25,16 +24,16 @@ var badgerNoTxRepositoriesSet = wire.NewSet(
 	wire.Bind(new(blobReplication.WantedBlobsProvider), new(*notx.NoTxBlobWantListRepository)),
 	wire.Bind(new(blobReplication.WantListRepository), new(*notx.NoTxBlobWantListRepository)),
 
-	notx.NewNoTxWantedFeedsRepository,
-	wire.Bind(new(replication.WantedFeedsRepository), new(*notx.NoTxWantedFeedsRepository)),
-
 	notx.NewNoTxBlobsRepository,
 	wire.Bind(new(blobReplication.BlobsRepository), new(*notx.NoTxBlobsRepository)),
+
+	notx.NewNoTxFeedWantListRepository,
 )
 
 var badgerRepositoriesSet = wire.NewSet(
 	scuttlegobadgeradapters.NewBanListRepository,
 	wire.Bind(new(scuttlegocommands.BanListRepository), new(*scuttlegobadgeradapters.BanListRepository)),
+	wire.Bind(new(scuttlegoqueries.BanListRepository), new(*scuttlegobadgeradapters.BanListRepository)),
 
 	scuttlegobadgeradapters.NewBlobWantListRepository,
 	wire.Bind(new(scuttlegocommands.BlobWantListRepository), new(*scuttlegobadgeradapters.BlobWantListRepository)),
@@ -42,6 +41,7 @@ var badgerRepositoriesSet = wire.NewSet(
 
 	scuttlegobadgeradapters.NewFeedWantListRepository,
 	wire.Bind(new(scuttlegocommands.FeedWantListRepository), new(*scuttlegobadgeradapters.FeedWantListRepository)),
+	wire.Bind(new(scuttlegoqueries.FeedWantListRepository), new(*scuttlegobadgeradapters.FeedWantListRepository)),
 
 	scuttlegobadgeradapters.NewReceiveLogRepository,
 	wire.Bind(new(scuttlegocommands.ReceiveLogRepository), new(*scuttlegobadgeradapters.ReceiveLogRepository)),
@@ -49,6 +49,7 @@ var badgerRepositoriesSet = wire.NewSet(
 
 	scuttlegobadgeradapters.NewSocialGraphRepository,
 	wire.Bind(new(scuttlegocommands.SocialGraphRepository), new(*scuttlegobadgeradapters.SocialGraphRepository)),
+	wire.Bind(new(scuttlegoqueries.SocialGraphRepository), new(*scuttlegobadgeradapters.SocialGraphRepository)),
 	wire.Bind(new(pubcommands.SocialGraphRepository), new(*scuttlegobadgeradapters.SocialGraphRepository)),
 
 	scuttlegobadgeradapters.NewFeedRepository,
@@ -58,7 +59,6 @@ var badgerRepositoriesSet = wire.NewSet(
 	scuttlegobadgeradapters.NewMessageRepository,
 	wire.Bind(new(scuttlegoqueries.MessageRepository), new(*scuttlegobadgeradapters.MessageRepository)),
 
-	scuttlegobadgeradapters.NewWantedFeedsRepository,
 	scuttlegobadgeradapters.NewPubRepository,
 	scuttlegobadgeradapters.NewBlobRepository,
 

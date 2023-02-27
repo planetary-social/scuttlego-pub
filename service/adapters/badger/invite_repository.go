@@ -3,12 +3,13 @@ package badger
 import (
 	"encoding/base64"
 	"encoding/json"
+	"time"
+
 	"github.com/boreq/errors"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/planetary-social/scuttlego-pub/service/domain"
 	"github.com/planetary-social/scuttlego/service/adapters/badger/utils"
 	"github.com/planetary-social/scuttlego/service/domain/identity"
-	"time"
 )
 
 type InviteRepository struct {

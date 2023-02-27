@@ -1,10 +1,11 @@
 package domain_test
 
 import (
+	"testing"
+
 	"github.com/planetary-social/scuttlego-pub/service/domain"
 	"github.com/planetary-social/scuttlego/fixtures"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestNewSecretKeySeed(t *testing.T) {

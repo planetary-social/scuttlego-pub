@@ -1,13 +1,14 @@
 package domain_test
 
 import (
+	"testing"
+	"time"
+
 	"github.com/boreq/errors"
 	"github.com/planetary-social/scuttlego-pub/internal"
 	"github.com/planetary-social/scuttlego-pub/service/domain"
 	"github.com/planetary-social/scuttlego/service/domain/identity"
 	"github.com/stretchr/testify/require"
-	"testing"
-	"time"
 )
 
 func TestInviteConstructors(t *testing.T) {

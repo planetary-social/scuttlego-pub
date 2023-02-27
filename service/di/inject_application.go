@@ -59,7 +59,7 @@ var scuttlegoCommandsSet = wire.NewSet(
 	wire.Bind(new(network.ProcessNewLocalDiscoveryCommandHandler), new(*scuttlegocommands.ProcessNewLocalDiscoveryHandler)),
 
 	scuttlegocommands.NewAcceptNewPeerHandler,
-	wire.Bind(new(network.AcceptNewPeerCommandHandler), new(*scuttlegocommands.AcceptNewPeerHandler)),
+	wire.Bind(new(pubsub.AcceptNewPeerCommandHandler), new(*scuttlegocommands.AcceptNewPeerHandler)),
 
 	scuttlegocommands.NewEstablishNewConnectionsHandler,
 	wire.Bind(new(network.EstablishNewConnectionsCommandHandler), new(*scuttlegocommands.EstablishNewConnectionsHandler)),
