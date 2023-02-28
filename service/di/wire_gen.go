@@ -8,13 +8,16 @@ package di
 
 import (
 	"path/filepath"
+	"testing"
 
 	"github.com/boreq/errors"
-	"github.com/dgraph-io/badger/v3"
+	badger3 "github.com/dgraph-io/badger/v3"
+	"github.com/planetary-social/scuttlego-pub/internal/fixtures"
 	"github.com/planetary-social/scuttlego-pub/service"
-	badger3 "github.com/planetary-social/scuttlego-pub/service/adapters/badger"
+	"github.com/planetary-social/scuttlego-pub/service/adapters/badger"
+	"github.com/planetary-social/scuttlego-pub/service/adapters/mocks"
 	"github.com/planetary-social/scuttlego-pub/service/app"
-	commands2 "github.com/planetary-social/scuttlego-pub/service/app/commands"
+	"github.com/planetary-social/scuttlego-pub/service/app/commands"
 	"github.com/planetary-social/scuttlego-pub/service/domain/messages/transport"
 	"github.com/planetary-social/scuttlego/logging"
 	migrations2 "github.com/planetary-social/scuttlego/migrations"
@@ -24,7 +27,7 @@ import (
 	ebt2 "github.com/planetary-social/scuttlego/service/adapters/ebt"
 	"github.com/planetary-social/scuttlego/service/adapters/migrations"
 	"github.com/planetary-social/scuttlego/service/adapters/pubsub"
-	"github.com/planetary-social/scuttlego/service/app/commands"
+	commands2 "github.com/planetary-social/scuttlego/service/app/commands"
 	"github.com/planetary-social/scuttlego/service/app/queries"
 	"github.com/planetary-social/scuttlego/service/domain"
 	"github.com/planetary-social/scuttlego/service/domain/blobs"
@@ -51,7 +54,190 @@ import (
 
 // Injectors from wire.go:
 
-func buildBadgerNoTxTxAdapters(txn *badger.Txn, public identity.Public, config service.Config, logger logging.Logger) (notx.TxAdapters, error) {
+func BuildService(private identity.Private, config service.Config) (service.Service, func(), error) {
+	logrusLoggingSystem := newLoggingSystem()
+	logger := newContextLogger(logrusLoggingSystem)
+	db, cleanup, err := newBadger(logrusLoggingSystem, logger, config)
+	if err != nil {
+		return service.Service{}, nil, err
+	}
+	public := privateIdentityToPublicIdentity(private)
+	commandsAdaptersFactory := badgerPubCommandsAdaptersFactory(config, public, logger)
+	commandsTransactionProvider := badger.NewCommandsTransactionProvider(db, commandsAdaptersFactory)
+	createInviteHandler := commands.NewCreateInviteHandler(commandsTransactionProvider)
+	currentTimeProvider := adapters.NewCurrentTimeProvider()
+	messageContentMappings := transport.Mappings()
+	marshaler, err := transport2.NewMarshaler(messageContentMappings, logger)
+	if err != nil {
+		cleanup()
+		return service.Service{}, nil, err
+	}
+	redeemInviteHandler := commands.NewRedeemInviteHandler(commandsTransactionProvider, currentTimeProvider, marshaler, private)
+	appCommands := app.Commands{
+		CreateInvite: createInviteHandler,
+		RedeemInvite: redeemInviteHandler,
+	}
+	appQueries := app.Queries{}
+	application := app.Application{
+		Commands: appCommands,
+		Queries:  appQueries,
+	}
+	badgerStorage := migrations.NewBadgerStorage(db)
+	runner := migrations2.NewRunner(badgerStorage, logger)
+	v := newMigrationsList()
+	migrationsMigrations, err := migrations2.NewMigrations(v)
+	if err != nil {
+		cleanup()
+		return service.Service{}, nil, err
+	}
+	runMigrationsHandler := commands2.NewRunMigrationsHandler(runner, migrationsMigrations)
+	networkKey := extractNetworkKeyFromConfig(config)
+	handshaker, err := boxstream.NewHandshaker(private, networkKey, currentTimeProvider)
+	if err != nil {
+		cleanup()
+		return service.Service{}, nil, err
+	}
+	requestPubSub := pubsub.NewRequestPubSub()
+	connectionIdGenerator := rpc.NewConnectionIdGenerator()
+	newPeerPubSub := pubsub.NewNewPeerPubSub()
+	peerInitializer := transport3.NewPeerInitializer(handshaker, requestPubSub, connectionIdGenerator, newPeerPubSub, logger)
+	listener, err := newListener(peerInitializer, config, logger)
+	if err != nil {
+		cleanup()
+		return service.Service{}, nil, err
+	}
+	discoverer, err := local.NewDiscoverer(public, logger)
+	if err != nil {
+		cleanup()
+		return service.Service{}, nil, err
+	}
+	peerManagerConfig := newPeerManagerConfig()
+	dialer, err := network.NewDialer(peerInitializer, logger)
+	if err != nil {
+		cleanup()
+		return service.Service{}, nil, err
+	}
+	tunnelDialer := tunnel.NewDialer(peerInitializer)
+	peerManager := domain.NewPeerManager(peerManagerConfig, dialer, tunnelDialer, logger)
+	processNewLocalDiscoveryHandler := commands2.NewProcessNewLocalDiscoveryHandler(peerManager)
+	networkDiscoverer := network2.NewDiscoverer(discoverer, processNewLocalDiscoveryHandler, logger)
+	establishNewConnectionsHandler := commands2.NewEstablishNewConnectionsHandler(peerManager)
+	connectionEstablisher := network2.NewConnectionEstablisher(establishNewConnectionsHandler, logger)
+	filesystemStorage, err := newFilesystemStorage(logger, config)
+	if err != nil {
+		cleanup()
+		return service.Service{}, nil, err
+	}
+	getBlobHandler, err := queries.NewGetBlobHandler(filesystemStorage)
+	if err != nil {
+		cleanup()
+		return service.Service{}, nil, err
+	}
+	handlerBlobsGet := rpc2.NewHandlerBlobsGet(getBlobHandler)
+	txAdaptersFactory := noTxTxAdaptersFactory(public, config, logger)
+	txAdaptersFactoryTransactionProvider := notx.NewTxAdaptersFactoryTransactionProvider(db, txAdaptersFactory)
+	noTxBlobWantListRepository := notx.NewNoTxBlobWantListRepository(txAdaptersFactoryTransactionProvider, logger)
+	noTxBlobsRepository := notx.NewNoTxBlobsRepository(txAdaptersFactoryTransactionProvider)
+	storageBlobsThatShouldBePushedProvider, err := replication.NewStorageBlobsThatShouldBePushedProvider(noTxBlobsRepository, public, currentTimeProvider)
+	if err != nil {
+		cleanup()
+		return service.Service{}, nil, err
+	}
+	blobsGetDownloader := replication.NewBlobsGetDownloader(filesystemStorage, logger)
+	blobDownloadedPubSub := pubsub.NewBlobDownloadedPubSub()
+	hasHandler := replication.NewHasHandler(filesystemStorage, noTxBlobWantListRepository, blobsGetDownloader, blobDownloadedPubSub, logger)
+	diManagedWantsProcessFactory := newManagedWantsProcessFactory(noTxBlobWantListRepository, storageBlobsThatShouldBePushedProvider, filesystemStorage, hasHandler, logger)
+	manager := replication.NewManager(diManagedWantsProcessFactory, logger)
+	createWantsHandler := commands2.NewCreateWantsHandler(manager)
+	handlerBlobsCreateWants := rpc2.NewHandlerBlobsCreateWants(createWantsHandler)
+	sessionTracker := ebt.NewSessionTracker()
+	scanner := blobs.NewScanner()
+	parser := content.NewParser(marshaler, scanner)
+	messageHMAC := extractMessageHMACFromConfig(config)
+	scuttlebutt := formats.NewScuttlebutt(parser, messageHMAC)
+	v2 := newFormats(scuttlebutt)
+	rawMessageIdentifier := formats.NewRawMessageIdentifier(v2)
+	badgerCommandsAdaptersFactory := badgerScuttlegoCommandsAdaptersFactory(config, public, logger)
+	badgerCommandsTransactionProvider := badger2.NewCommandsTransactionProvider(db, badgerCommandsAdaptersFactory)
+	queriesAdaptersFactory := badgerScuttlegoQueriesAdaptersFactory(config, public, logger)
+	queriesTransactionProvider := badger2.NewQueriesTransactionProvider(db, queriesAdaptersFactory)
+	wantedFeedsProvider := queries.NewWantedFeedsProvider(queriesTransactionProvider)
+	wantedFeedsCache := replication2.NewWantedFeedsCache(wantedFeedsProvider)
+	messageBuffer := commands2.NewMessageBuffer(badgerCommandsTransactionProvider, rawMessageIdentifier, wantedFeedsCache, logger)
+	rawMessageHandler := commands2.NewRawMessageHandler(rawMessageIdentifier, messageBuffer, logger)
+	messagePubSub := pubsub.NewMessagePubSub()
+	createHistoryStreamHandler := queries.NewCreateHistoryStreamHandler(queriesTransactionProvider, messagePubSub, logger)
+	createHistoryStreamHandlerAdapter := ebt2.NewCreateHistoryStreamHandlerAdapter(createHistoryStreamHandler)
+	sessionRunner := ebt.NewSessionRunner(logger, rawMessageHandler, wantedFeedsCache, createHistoryStreamHandlerAdapter)
+	gossipManager := gossip.NewManager(logger, wantedFeedsCache)
+	gossipReplicator, err := gossip.NewGossipReplicator(gossipManager, rawMessageHandler, logger)
+	if err != nil {
+		cleanup()
+		return service.Service{}, nil, err
+	}
+	replicator := ebt.NewReplicator(sessionTracker, sessionRunner, gossipReplicator, logger)
+	handleIncomingEbtReplicateHandler := commands2.NewHandleIncomingEbtReplicateHandler(replicator)
+	handlerEbtReplicate := rpc2.NewHandlerEbtReplicate(handleIncomingEbtReplicateHandler)
+	acceptTunnelConnectHandler := commands2.NewAcceptTunnelConnectHandler(public, peerInitializer)
+	handlerTunnelConnect := rpc2.NewHandlerTunnelConnect(acceptTunnelConnectHandler)
+	v3 := rpc2.NewMuxHandlers(handlerBlobsGet, handlerBlobsCreateWants, handlerEbtReplicate, handlerTunnelConnect)
+	handlerCreateHistoryStream := rpc2.NewHandlerCreateHistoryStream(createHistoryStreamHandler, logger)
+	v4 := rpc2.NewMuxClosingHandlers(handlerCreateHistoryStream)
+	muxMux, err := mux.NewMux(logger, v3, v4)
+	if err != nil {
+		cleanup()
+		return service.Service{}, nil, err
+	}
+	requestSubscriber := pubsub2.NewRequestSubscriber(requestPubSub, muxMux)
+	roomAttendantEventPubSub := pubsub.NewRoomAttendantEventPubSub()
+	processRoomAttendantEventHandler := commands2.NewProcessRoomAttendantEventHandler(peerManager)
+	roomAttendantEventSubscriber := pubsub2.NewRoomAttendantEventSubscriber(roomAttendantEventPubSub, processRoomAttendantEventHandler, logger)
+	advertiser, err := newAdvertiser(public, config)
+	if err != nil {
+		cleanup()
+		return service.Service{}, nil, err
+	}
+	garbageCollector := badger2.NewGarbageCollector(db, logger)
+	serviceService := service.NewService(application, runMigrationsHandler, listener, networkDiscoverer, connectionEstablisher, requestSubscriber, roomAttendantEventSubscriber, advertiser, messageBuffer, createHistoryStreamHandler, garbageCollector)
+	return serviceService, func() {
+		cleanup()
+	}, nil
+}
+
+func BuildTestApplication(tb testing.TB) (TestApplication, error) {
+	socialGraphRepositoryMock := mocks.NewSocialGraphRepositoryMock()
+	inviteRespositoryMock := mocks.NewInviteRespositoryMock()
+	feedFormatMock := mocks.NewFeedFormatMock()
+	feedRepositoryMock := mocks.NewFeedRepositoryMock(feedFormatMock)
+	commandsAdapters := commands.Adapters{
+		SocialGraph: socialGraphRepositoryMock,
+		Invite:      inviteRespositoryMock,
+		Feed:        feedRepositoryMock,
+	}
+	mockCommandsTransactionProvider := mocks.NewMockCommandsTransactionProvider(commandsAdapters)
+	createInviteHandler := commands.NewCreateInviteHandler(mockCommandsTransactionProvider)
+	currentTimeProviderMock := mocks.NewCurrentTimeProviderMock()
+	marshalerMock := mocks.NewMarshalerMock()
+	private := fixtures.SomePrivateIdentity()
+	redeemInviteHandler := commands.NewRedeemInviteHandler(mockCommandsTransactionProvider, currentTimeProviderMock, marshalerMock, private)
+	appCommands := app.Commands{
+		CreateInvite: createInviteHandler,
+		RedeemInvite: redeemInviteHandler,
+	}
+	testApplication := TestApplication{
+		Commands:              appCommands,
+		SocialGraphRepository: socialGraphRepositoryMock,
+		InviteRepository:      inviteRespositoryMock,
+		FeedRepository:        feedRepositoryMock,
+		Marshaler:             marshalerMock,
+		FeedFormat:            feedFormatMock,
+		LocalIdentity:         private,
+		CurrentTimeProvider:   currentTimeProviderMock,
+	}
+	return testApplication, nil
+}
+
+func buildBadgerNoTxTxAdapters(txn *badger3.Txn, public identity.Public, config service.Config, logger logging.Logger) (notx.TxAdapters, error) {
 	banListHasher := adapters.NewBanListHasher()
 	banListRepository := badger2.NewBanListRepository(txn, banListHasher)
 	blobRepository := badger2.NewBlobRepository(txn)
@@ -89,7 +275,7 @@ func buildBadgerNoTxTxAdapters(txn *badger.Txn, public identity.Public, config s
 	return txAdapters, nil
 }
 
-func buildBadgerScuttlegoCommandsAdapters(txn *badger.Txn, public identity.Public, config service.Config, logger logging.Logger) (commands.Adapters, error) {
+func buildBadgerScuttlegoCommandsAdapters(txn *badger3.Txn, public identity.Public, config service.Config, logger logging.Logger) (commands2.Adapters, error) {
 	hops := extractHopsFromConfig(config)
 	banListHasher := adapters.NewBanListHasher()
 	banListRepository := badger2.NewBanListRepository(txn, banListHasher)
@@ -97,7 +283,7 @@ func buildBadgerScuttlegoCommandsAdapters(txn *badger.Txn, public identity.Publi
 	messageContentMappings := transport.Mappings()
 	marshaler, err := transport2.NewMarshaler(messageContentMappings, logger)
 	if err != nil {
-		return commands.Adapters{}, err
+		return commands2.Adapters{}, err
 	}
 	scanner := blobs.NewScanner()
 	parser := content.NewParser(marshaler, scanner)
@@ -113,7 +299,7 @@ func buildBadgerScuttlegoCommandsAdapters(txn *badger.Txn, public identity.Publi
 	currentTimeProvider := adapters.NewCurrentTimeProvider()
 	blobWantListRepository := badger2.NewBlobWantListRepository(txn, currentTimeProvider)
 	feedWantListRepository := badger2.NewFeedWantListRepository(txn, currentTimeProvider)
-	commandsAdapters := commands.Adapters{
+	commandsAdapters := commands2.Adapters{
 		Feed:         feedRepository,
 		ReceiveLog:   receiveLogRepository,
 		SocialGraph:  socialGraphRepository,
@@ -124,7 +310,7 @@ func buildBadgerScuttlegoCommandsAdapters(txn *badger.Txn, public identity.Publi
 	return commandsAdapters, nil
 }
 
-func buildBadgerScuttlegoQueriesAdapters(txn *badger.Txn, public identity.Public, config service.Config, logger logging.Logger) (queries.Adapters, error) {
+func buildBadgerScuttlegoQueriesAdapters(txn *badger3.Txn, public identity.Public, config service.Config, logger logging.Logger) (queries.Adapters, error) {
 	hops := extractHopsFromConfig(config)
 	banListHasher := adapters.NewBanListHasher()
 	banListRepository := badger2.NewBanListRepository(txn, banListHasher)
@@ -158,16 +344,16 @@ func buildBadgerScuttlegoQueriesAdapters(txn *badger.Txn, public identity.Public
 	return queriesAdapters, nil
 }
 
-func buildBadgerPubCommandsAdapters(txn *badger.Txn, public identity.Public, config service.Config, logger logging.Logger) (commands2.Adapters, error) {
+func buildBadgerPubCommandsAdapters(txn *badger3.Txn, public identity.Public, config service.Config, logger logging.Logger) (commands.Adapters, error) {
 	hops := extractHopsFromConfig(config)
 	banListHasher := adapters.NewBanListHasher()
 	banListRepository := badger2.NewBanListRepository(txn, banListHasher)
 	socialGraphRepository := badger2.NewSocialGraphRepository(txn, public, hops, banListRepository, banListHasher)
-	inviteRepository := badger3.NewInviteRepository(txn)
+	inviteRepository := badger.NewInviteRepository(txn)
 	messageContentMappings := transport.Mappings()
 	marshaler, err := transport2.NewMarshaler(messageContentMappings, logger)
 	if err != nil {
-		return commands2.Adapters{}, err
+		return commands.Adapters{}, err
 	}
 	scanner := blobs.NewScanner()
 	parser := content.NewParser(marshaler, scanner)
@@ -180,7 +366,7 @@ func buildBadgerPubCommandsAdapters(txn *badger.Txn, public identity.Public, con
 	pubRepository := badger2.NewPubRepository(txn)
 	blobRepository := badger2.NewBlobRepository(txn)
 	feedRepository := badger2.NewFeedRepository(txn, socialGraphRepository, receiveLogRepository, messageRepository, pubRepository, blobRepository, banListRepository, scuttlebutt)
-	commandsAdapters := commands2.Adapters{
+	commandsAdapters := commands.Adapters{
 		SocialGraph: socialGraphRepository,
 		Invite:      inviteRepository,
 		Feed:        feedRepository,
@@ -188,172 +374,32 @@ func buildBadgerPubCommandsAdapters(txn *badger.Txn, public identity.Public, con
 	return commandsAdapters, nil
 }
 
-// BuildService creates a new service which uses the provided context as a long-term context used as a base context for
-// e.g. established connections.
-func BuildService(private identity.Private, config service.Config) (service.Service, func(), error) {
-	logrusLoggingSystem := newLoggingSystem()
-	logger := newContextLogger(logrusLoggingSystem)
-	db, cleanup, err := newBadger(logrusLoggingSystem, logger, config)
-	if err != nil {
-		return service.Service{}, nil, err
-	}
-	public := privateIdentityToPublicIdentity(private)
-	commandsAdaptersFactory := badgerPubCommandsAdaptersFactory(config, public, logger)
-	commandsTransactionProvider := badger3.NewCommandsTransactionProvider(db, commandsAdaptersFactory)
-	createInviteHandler := commands2.NewCreateInviteHandler(commandsTransactionProvider)
-	currentTimeProvider := adapters.NewCurrentTimeProvider()
-	messageContentMappings := transport.Mappings()
-	marshaler, err := transport2.NewMarshaler(messageContentMappings, logger)
-	if err != nil {
-		cleanup()
-		return service.Service{}, nil, err
-	}
-	redeemInviteHandler := commands2.NewRedeemInviteHandler(commandsTransactionProvider, currentTimeProvider, marshaler, private)
-	appCommands := app.Commands{
-		CreateInvite: createInviteHandler,
-		RedeemInvite: redeemInviteHandler,
-	}
-	appQueries := app.Queries{}
-	application := app.Application{
-		Commands: appCommands,
-		Queries:  appQueries,
-	}
-	badgerStorage := migrations.NewBadgerStorage(db)
-	runner := migrations2.NewRunner(badgerStorage, logger)
-	v := newMigrationsList()
-	migrationsMigrations, err := migrations2.NewMigrations(v)
-	if err != nil {
-		cleanup()
-		return service.Service{}, nil, err
-	}
-	runMigrationsHandler := commands.NewRunMigrationsHandler(runner, migrationsMigrations)
-	networkKey := extractNetworkKeyFromConfig(config)
-	handshaker, err := boxstream.NewHandshaker(private, networkKey, currentTimeProvider)
-	if err != nil {
-		cleanup()
-		return service.Service{}, nil, err
-	}
-	requestPubSub := pubsub.NewRequestPubSub()
-	connectionIdGenerator := rpc.NewConnectionIdGenerator()
-	newPeerPubSub := pubsub.NewNewPeerPubSub()
-	peerInitializer := transport3.NewPeerInitializer(handshaker, requestPubSub, connectionIdGenerator, newPeerPubSub, logger)
-	listener, err := newListener(peerInitializer, config, logger)
-	if err != nil {
-		cleanup()
-		return service.Service{}, nil, err
-	}
-	discoverer, err := local.NewDiscoverer(public, logger)
-	if err != nil {
-		cleanup()
-		return service.Service{}, nil, err
-	}
-	peerManagerConfig := newPeerManagerConfig()
-	dialer, err := network.NewDialer(peerInitializer, logger)
-	if err != nil {
-		cleanup()
-		return service.Service{}, nil, err
-	}
-	tunnelDialer := tunnel.NewDialer(peerInitializer)
-	peerManager := domain.NewPeerManager(peerManagerConfig, dialer, tunnelDialer, logger)
-	processNewLocalDiscoveryHandler := commands.NewProcessNewLocalDiscoveryHandler(peerManager)
-	networkDiscoverer := network2.NewDiscoverer(discoverer, processNewLocalDiscoveryHandler, logger)
-	establishNewConnectionsHandler := commands.NewEstablishNewConnectionsHandler(peerManager)
-	connectionEstablisher := network2.NewConnectionEstablisher(establishNewConnectionsHandler, logger)
-	filesystemStorage, err := newFilesystemStorage(logger, config)
-	if err != nil {
-		cleanup()
-		return service.Service{}, nil, err
-	}
-	getBlobHandler, err := queries.NewGetBlobHandler(filesystemStorage)
-	if err != nil {
-		cleanup()
-		return service.Service{}, nil, err
-	}
-	handlerBlobsGet := rpc2.NewHandlerBlobsGet(getBlobHandler)
-	txAdaptersFactory := noTxTxAdaptersFactory(public, config, logger)
-	txAdaptersFactoryTransactionProvider := notx.NewTxAdaptersFactoryTransactionProvider(db, txAdaptersFactory)
-	noTxBlobWantListRepository := notx.NewNoTxBlobWantListRepository(txAdaptersFactoryTransactionProvider, logger)
-	noTxBlobsRepository := notx.NewNoTxBlobsRepository(txAdaptersFactoryTransactionProvider)
-	storageBlobsThatShouldBePushedProvider, err := replication.NewStorageBlobsThatShouldBePushedProvider(noTxBlobsRepository, public, currentTimeProvider)
-	if err != nil {
-		cleanup()
-		return service.Service{}, nil, err
-	}
-	blobsGetDownloader := replication.NewBlobsGetDownloader(filesystemStorage, logger)
-	blobDownloadedPubSub := pubsub.NewBlobDownloadedPubSub()
-	hasHandler := replication.NewHasHandler(filesystemStorage, noTxBlobWantListRepository, blobsGetDownloader, blobDownloadedPubSub, logger)
-	diManagedWantsProcessFactory := newManagedWantsProcessFactory(noTxBlobWantListRepository, storageBlobsThatShouldBePushedProvider, filesystemStorage, hasHandler, logger)
-	manager := replication.NewManager(diManagedWantsProcessFactory, logger)
-	createWantsHandler := commands.NewCreateWantsHandler(manager)
-	handlerBlobsCreateWants := rpc2.NewHandlerBlobsCreateWants(createWantsHandler)
-	sessionTracker := ebt.NewSessionTracker()
-	scanner := blobs.NewScanner()
-	parser := content.NewParser(marshaler, scanner)
-	messageHMAC := extractMessageHMACFromConfig(config)
-	scuttlebutt := formats.NewScuttlebutt(parser, messageHMAC)
-	v2 := newFormats(scuttlebutt)
-	rawMessageIdentifier := formats.NewRawMessageIdentifier(v2)
-	badgerCommandsAdaptersFactory := badgerScuttlegoCommandsAdaptersFactory(config, public, logger)
-	badgerCommandsTransactionProvider := badger2.NewCommandsTransactionProvider(db, badgerCommandsAdaptersFactory)
-	queriesAdaptersFactory := badgerScuttlegoQueriesAdaptersFactory(config, public, logger)
-	queriesTransactionProvider := badger2.NewQueriesTransactionProvider(db, queriesAdaptersFactory)
-	wantedFeedsProvider := queries.NewWantedFeedsProvider(queriesTransactionProvider)
-	wantedFeedsCache := replication2.NewWantedFeedsCache(wantedFeedsProvider)
-	messageBuffer := commands.NewMessageBuffer(badgerCommandsTransactionProvider, rawMessageIdentifier, wantedFeedsCache, logger)
-	rawMessageHandler := commands.NewRawMessageHandler(rawMessageIdentifier, messageBuffer, logger)
-	messagePubSub := pubsub.NewMessagePubSub()
-	createHistoryStreamHandler := queries.NewCreateHistoryStreamHandler(queriesTransactionProvider, messagePubSub, logger)
-	createHistoryStreamHandlerAdapter := ebt2.NewCreateHistoryStreamHandlerAdapter(createHistoryStreamHandler)
-	sessionRunner := ebt.NewSessionRunner(logger, rawMessageHandler, wantedFeedsCache, createHistoryStreamHandlerAdapter)
-	gossipManager := gossip.NewManager(logger, wantedFeedsCache)
-	gossipReplicator, err := gossip.NewGossipReplicator(gossipManager, rawMessageHandler, logger)
-	if err != nil {
-		cleanup()
-		return service.Service{}, nil, err
-	}
-	replicator := ebt.NewReplicator(sessionTracker, sessionRunner, gossipReplicator, logger)
-	handleIncomingEbtReplicateHandler := commands.NewHandleIncomingEbtReplicateHandler(replicator)
-	handlerEbtReplicate := rpc2.NewHandlerEbtReplicate(handleIncomingEbtReplicateHandler)
-	acceptTunnelConnectHandler := commands.NewAcceptTunnelConnectHandler(public, peerInitializer)
-	handlerTunnelConnect := rpc2.NewHandlerTunnelConnect(acceptTunnelConnectHandler)
-	v3 := rpc2.NewMuxHandlers(handlerBlobsGet, handlerBlobsCreateWants, handlerEbtReplicate, handlerTunnelConnect)
-	handlerCreateHistoryStream := rpc2.NewHandlerCreateHistoryStream(createHistoryStreamHandler, logger)
-	v4 := rpc2.NewMuxClosingHandlers(handlerCreateHistoryStream)
-	muxMux, err := mux.NewMux(logger, v3, v4)
-	if err != nil {
-		cleanup()
-		return service.Service{}, nil, err
-	}
-	requestSubscriber := pubsub2.NewRequestSubscriber(requestPubSub, muxMux)
-	roomAttendantEventPubSub := pubsub.NewRoomAttendantEventPubSub()
-	processRoomAttendantEventHandler := commands.NewProcessRoomAttendantEventHandler(peerManager)
-	roomAttendantEventSubscriber := pubsub2.NewRoomAttendantEventSubscriber(roomAttendantEventPubSub, processRoomAttendantEventHandler, logger)
-	advertiser, err := newAdvertiser(public, config)
-	if err != nil {
-		cleanup()
-		return service.Service{}, nil, err
-	}
-	garbageCollector := badger2.NewGarbageCollector(db, logger)
-	serviceService := service.NewService(application, runMigrationsHandler, listener, networkDiscoverer, connectionEstablisher, requestSubscriber, roomAttendantEventSubscriber, advertiser, messageBuffer, createHistoryStreamHandler, garbageCollector)
-	return serviceService, func() {
-		cleanup()
-	}, nil
-}
-
 // wire.go:
+
+type TestApplication struct {
+	Commands app.Commands
+
+	SocialGraphRepository *mocks.SocialGraphRepositoryMock
+	InviteRepository      *mocks.InviteRespositoryMock
+	FeedRepository        *mocks.FeedRepositoryMock
+	Marshaler             *mocks.MarshalerMock
+	FeedFormat            *mocks.FeedFormatMock
+	LocalIdentity         identity.Private
+	CurrentTimeProvider   *mocks.CurrentTimeProviderMock
+}
 
 func newAdvertiser(l identity.Public, config service.Config) (*local.Advertiser, error) {
 	return local.NewAdvertiser(l, config.ListenAddress)
 }
 
-func newBadger(system logging.LoggingSystem, logger logging.Logger, config service.Config) (*badger.DB, func(), error) {
+func newBadger(system logging.LoggingSystem, logger logging.Logger, config service.Config) (*badger3.DB, func(), error) {
 	badgerDirectory := filepath.Join(config.DataDirectory, "badger")
 
-	options := badger.DefaultOptions(badgerDirectory)
+	options := badger3.DefaultOptions(badgerDirectory)
 	options.Logger = badger2.NewLogger(system, badger2.LoggerLevelWarning)
 	options.SyncWrites = true
 
-	db, err := badger.Open(options)
+	db, err := badger3.Open(options)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to open the database")
 	}

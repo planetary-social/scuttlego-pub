@@ -44,10 +44,10 @@ func MustNewSecretKeySeedFromBytes(seed []byte) SecretKeySeed {
 	return v
 }
 
-func (s *SecretKeySeed) Bytes() []byte {
+func (s SecretKeySeed) Bytes() []byte {
 	return internal.CopySlice(s.seed)
 }
 
-func (s *SecretKeySeed) IsZero() bool {
+func (s SecretKeySeed) IsZero() bool {
 	return len(s.seed) == 0
 }

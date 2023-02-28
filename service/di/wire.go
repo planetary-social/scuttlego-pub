@@ -5,11 +5,15 @@ package di
 
 import (
 	"path/filepath"
+	"testing"
 
 	"github.com/boreq/errors"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/google/wire"
+	"github.com/planetary-social/scuttlego-pub/internal/fixtures"
 	"github.com/planetary-social/scuttlego-pub/service"
+	pubmocks "github.com/planetary-social/scuttlego-pub/service/adapters/mocks"
+	"github.com/planetary-social/scuttlego-pub/service/app"
 	"github.com/planetary-social/scuttlego-pub/service/app/commands"
 	"github.com/planetary-social/scuttlego/logging"
 	badgeradapters "github.com/planetary-social/scuttlego/service/adapters/badger"
@@ -22,6 +26,96 @@ import (
 	"github.com/planetary-social/scuttlego/service/domain/rooms/tunnel"
 	"github.com/sirupsen/logrus"
 )
+
+func BuildService(identity.Private, service.Config) (service.Service, func(), error) {
+	wire.Build(
+		service.NewService,
+
+		domain.NewPeerManager,
+		wire.Bind(new(scuttlegocommands.PeerManager), new(*domain.PeerManager)),
+
+		newBadger,
+
+		newAdvertiser,
+		privateIdentityToPublicIdentity,
+
+		scuttlegocommands.NewMessageBuffer,
+
+		tunnel.NewDialer,
+		wire.Bind(new(domain.RoomDialer), new(*tunnel.Dialer)),
+
+		newContextLogger,
+		newLoggingSystem,
+		wire.Bind(new(logging.LoggingSystem), new(logging.LogrusLoggingSystem)),
+
+		newPeerManagerConfig,
+
+		portsSet,
+		applicationSet,
+		scuttlegoApplicationSet,
+		replicationSet,
+		blobReplicatorSet,
+		formatsSet,
+		pubSubSet,
+		badgerNoTxRepositoriesSet,
+		badgerTransactionProviderSet,
+		badgerNoTxTransactionProviderSet,
+		badgerAdaptersSet,
+		blobsAdaptersSet,
+		adaptersSet,
+		extractFromConfigSet,
+		networkingSet,
+		migrationsSet,
+		contentSet,
+	)
+	return service.Service{}, nil, nil
+}
+
+type TestApplication struct {
+	Commands app.Commands
+
+	SocialGraphRepository *pubmocks.SocialGraphRepositoryMock
+	InviteRepository      *pubmocks.InviteRespositoryMock
+	FeedRepository        *pubmocks.FeedRepositoryMock
+	Marshaler             *pubmocks.MarshalerMock
+	FeedFormat            *pubmocks.FeedFormatMock
+	LocalIdentity         identity.Private
+	CurrentTimeProvider   *pubmocks.CurrentTimeProviderMock
+}
+
+func BuildTestApplication(testing.TB) (TestApplication, error) {
+	wire.Build(
+		wire.Struct(new(TestApplication), "*"),
+
+		commandsSet,
+
+		pubmocks.NewMockCommandsTransactionProvider,
+		wire.Bind(new(commands.TransactionProvider), new(*pubmocks.MockCommandsTransactionProvider)),
+
+		wire.Struct(new(commands.Adapters), "*"),
+
+		pubmocks.NewSocialGraphRepositoryMock,
+		wire.Bind(new(commands.SocialGraphRepository), new(*pubmocks.SocialGraphRepositoryMock)),
+
+		pubmocks.NewInviteRespositoryMock,
+		wire.Bind(new(commands.InviteRepository), new(*pubmocks.InviteRespositoryMock)),
+
+		pubmocks.NewFeedRepositoryMock,
+		wire.Bind(new(commands.FeedRepository), new(*pubmocks.FeedRepositoryMock)),
+
+		pubmocks.NewCurrentTimeProviderMock,
+		wire.Bind(new(commands.CurrentTimeProvider), new(*pubmocks.CurrentTimeProviderMock)),
+
+		pubmocks.NewMarshalerMock,
+		wire.Bind(new(commands.Marshaler), new(*pubmocks.MarshalerMock)),
+
+		pubmocks.NewFeedFormatMock,
+
+		fixtures.SomePrivateIdentity,
+	)
+
+	return TestApplication{}, nil
+}
 
 func buildBadgerNoTxTxAdapters(*badger.Txn, identity.Public, service.Config, logging.Logger) (notx.TxAdapters, error) {
 	wire.Build(
@@ -77,52 +171,6 @@ func buildBadgerPubCommandsAdapters(*badger.Txn, identity.Public, service.Config
 	)
 
 	return commands.Adapters{}, nil
-}
-
-// BuildService creates a new service which uses the provided context as a long-term context used as a base context for
-// e.g. established connections.
-func BuildService(identity.Private, service.Config) (service.Service, func(), error) {
-	wire.Build(
-		service.NewService,
-
-		domain.NewPeerManager,
-		wire.Bind(new(scuttlegocommands.PeerManager), new(*domain.PeerManager)),
-
-		newBadger,
-
-		newAdvertiser,
-		privateIdentityToPublicIdentity,
-
-		scuttlegocommands.NewMessageBuffer,
-
-		tunnel.NewDialer,
-		wire.Bind(new(domain.RoomDialer), new(*tunnel.Dialer)),
-
-		newContextLogger,
-		newLoggingSystem,
-		wire.Bind(new(logging.LoggingSystem), new(logging.LogrusLoggingSystem)),
-
-		newPeerManagerConfig,
-
-		portsSet,
-		applicationSet,
-		scuttlegoApplicationSet,
-		replicationSet,
-		blobReplicatorSet,
-		formatsSet,
-		pubSubSet,
-		badgerNoTxRepositoriesSet,
-		badgerTransactionProviderSet,
-		badgerNoTxTransactionProviderSet,
-		badgerAdaptersSet,
-		blobsAdaptersSet,
-		adaptersSet,
-		extractFromConfigSet,
-		networkingSet,
-		migrationsSet,
-		contentSet,
-	)
-	return service.Service{}, nil, nil
 }
 
 func newAdvertiser(l identity.Public, config service.Config) (*local.Advertiser, error) {

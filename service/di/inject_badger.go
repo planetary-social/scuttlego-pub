@@ -55,6 +55,7 @@ var badgerRepositoriesSet = wire.NewSet(
 	scuttlegobadgeradapters.NewFeedRepository,
 	wire.Bind(new(scuttlegocommands.FeedRepository), new(*scuttlegobadgeradapters.FeedRepository)),
 	wire.Bind(new(scuttlegoqueries.FeedRepository), new(*scuttlegobadgeradapters.FeedRepository)),
+	wire.Bind(new(pubcommands.FeedRepository), new(*scuttlegobadgeradapters.FeedRepository)),
 
 	scuttlegobadgeradapters.NewMessageRepository,
 	wire.Bind(new(scuttlegoqueries.MessageRepository), new(*scuttlegobadgeradapters.MessageRepository)),

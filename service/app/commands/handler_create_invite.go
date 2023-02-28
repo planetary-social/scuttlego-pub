@@ -62,7 +62,6 @@ func (h *CreateInviteHandler) Handle(cmd CreateInvite) (domain.SecretKeySeed, er
 		if err := adapters.Invite.Put(invite); err != nil {
 			return errors.Wrap(err, "error saving the invite")
 		}
-
 		return nil
 	}); err != nil {
 		return domain.SecretKeySeed{}, errors.Wrap(err, "transaction failed")

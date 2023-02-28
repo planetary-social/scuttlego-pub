@@ -5,7 +5,7 @@ import (
 
 	known "github.com/planetary-social/scuttlego-pub/service/domain/messages"
 	"github.com/planetary-social/scuttlego-pub/service/domain/messages/transport"
-	"github.com/planetary-social/scuttlego/fixtures"
+	"github.com/planetary-social/scuttlego/logging"
 	msgcontents "github.com/planetary-social/scuttlego/service/domain/feeds/content"
 	scuttlegoknown "github.com/planetary-social/scuttlego/service/domain/feeds/content/known"
 	scuttlegotransport "github.com/planetary-social/scuttlego/service/domain/feeds/content/transport"
@@ -257,7 +257,7 @@ func TestMappingPubFollowMarshal(t *testing.T) {
 }
 
 func newMarshaler(t *testing.T) *scuttlegotransport.Marshaler {
-	marshaler, err := scuttlegotransport.NewMarshaler(transport.Mappings(), fixtures.SomeLogger())
+	marshaler, err := scuttlegotransport.NewMarshaler(transport.Mappings(), logging.NewDevNullLogger())
 	require.NoError(t, err)
 
 	return marshaler

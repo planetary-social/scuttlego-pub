@@ -44,7 +44,7 @@ func runFn(cliContext guinea.Context) error {
 		return errors.Wrap(err, "error loading config")
 	}
 
-	service, cleanup, err := di.BuildService(ctx, iden, config)
+	service, cleanup, err := di.BuildService(iden, config)
 	if err != nil {
 		return errors.Wrap(err, "error building the service")
 	}

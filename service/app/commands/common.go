@@ -4,11 +4,12 @@ import (
 	"time"
 
 	"github.com/planetary-social/scuttlego-pub/service/domain"
-	"github.com/planetary-social/scuttlego/service/app/commands"
+	scuttlegocommands "github.com/planetary-social/scuttlego/service/app/commands"
 	"github.com/planetary-social/scuttlego/service/domain/feeds/content/known"
 	"github.com/planetary-social/scuttlego/service/domain/feeds/message"
 	"github.com/planetary-social/scuttlego/service/domain/graph"
 	"github.com/planetary-social/scuttlego/service/domain/identity"
+	"github.com/planetary-social/scuttlego/service/domain/refs"
 )
 
 type TransactionProvider interface {
@@ -18,7 +19,7 @@ type TransactionProvider interface {
 type Adapters struct {
 	SocialGraph SocialGraphRepository
 	Invite      InviteRepository
-	Feed        commands.FeedRepository
+	Feed        FeedRepository
 }
 
 type InviteRepository interface {
@@ -36,4 +37,10 @@ type CurrentTimeProvider interface {
 
 type Marshaler interface {
 	Marshal(content known.KnownMessageContent) (message.RawContent, error)
+}
+
+type FeedRepository interface {
+	// UpdateFeed updates the specified feed by calling the provided function on
+	// it. Feed is never nil.
+	UpdateFeed(ref refs.Feed, fn scuttlegocommands.UpdateFeedFn) error
 }
