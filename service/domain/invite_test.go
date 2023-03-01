@@ -6,6 +6,7 @@ import (
 
 	"github.com/boreq/errors"
 	"github.com/planetary-social/scuttlego-pub/internal"
+	"github.com/planetary-social/scuttlego-pub/internal/fixtures"
 	"github.com/planetary-social/scuttlego-pub/service/domain"
 	"github.com/planetary-social/scuttlego/service/domain/identity"
 	"github.com/stretchr/testify/require"
@@ -221,4 +222,24 @@ func TestInvite_RedeemRespectsNumberOfUses(t *testing.T) {
 	remainingUses, ok = invite.RemainingUses()
 	require.True(t, ok)
 	require.Equal(t, 0, remainingUses)
+}
+
+func TestInvite_ChangingParametersDoesNotChangeInternalFields(t *testing.T) {
+	seed := fixtures.SomeSecretKeySeed()
+	numberOfUses := fixtures.SomePositiveInt()
+	validUntil := fixtures.SomeTime()
+
+	invite, err := domain.NewInvite(seed, &numberOfUses, &validUntil)
+	require.NoError(t, err)
+
+	numberOfUses += 1
+	validUntil = validUntil.Add(1 * time.Second)
+
+	retrievedRemainingUses, ok := invite.RemainingUses()
+	require.True(t, ok)
+	require.NotEqual(t, numberOfUses, retrievedRemainingUses)
+
+	retrievedValidUntil, ok := invite.ValidUntil()
+	require.True(t, ok)
+	require.NotEqual(t, validUntil, retrievedValidUntil)
 }
