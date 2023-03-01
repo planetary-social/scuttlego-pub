@@ -4,94 +4,42 @@
 package di
 
 import (
-	"context"
 	"path/filepath"
+	"testing"
 
 	"github.com/boreq/errors"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/google/wire"
+	"github.com/planetary-social/scuttlego-pub/internal/fixtures"
 	"github.com/planetary-social/scuttlego-pub/service"
+	pubmocks "github.com/planetary-social/scuttlego-pub/service/adapters/mocks"
+	"github.com/planetary-social/scuttlego-pub/service/app"
+	"github.com/planetary-social/scuttlego-pub/service/app/commands"
 	"github.com/planetary-social/scuttlego/logging"
 	badgeradapters "github.com/planetary-social/scuttlego/service/adapters/badger"
 	"github.com/planetary-social/scuttlego/service/adapters/badger/notx"
-	"github.com/planetary-social/scuttlego/service/app/commands"
-	"github.com/planetary-social/scuttlego/service/app/queries"
+	scuttlegocommands "github.com/planetary-social/scuttlego/service/app/commands"
+	scuttlegoqueries "github.com/planetary-social/scuttlego/service/app/queries"
 	"github.com/planetary-social/scuttlego/service/domain"
 	"github.com/planetary-social/scuttlego/service/domain/identity"
 	"github.com/planetary-social/scuttlego/service/domain/network/local"
-	"github.com/planetary-social/scuttlego/service/domain/replication"
-	"github.com/planetary-social/scuttlego/service/domain/replication/ebt"
-	"github.com/planetary-social/scuttlego/service/domain/replication/gossip"
-	"github.com/planetary-social/scuttlego/service/domain/rooms"
 	"github.com/planetary-social/scuttlego/service/domain/rooms/tunnel"
 	"github.com/sirupsen/logrus"
 )
 
-func buildBadgerNoTxTxAdapters(*badger.Txn, identity.Public, service.Config, logging.Logger) (notx.TxAdapters, error) {
-	wire.Build(
-		wire.Struct(new(notx.TxAdapters), "*"),
-
-		badgerRepositoriesSet,
-		formatsSet,
-		extractFromConfigSet,
-		adaptersSet,
-		contentSet,
-	)
-
-	return notx.TxAdapters{}, nil
-}
-
-func buildBadgerCommandsAdapters(*badger.Txn, identity.Public, service.Config, logging.Logger) (commands.Adapters, error) {
-	wire.Build(
-		wire.Struct(new(commands.Adapters), "*"),
-
-		badgerRepositoriesSet,
-		formatsSet,
-		extractFromConfigSet,
-		adaptersSet,
-		contentSet,
-	)
-
-	return commands.Adapters{}, nil
-}
-
-func buildBadgerQueriesAdapters(*badger.Txn, identity.Public, service.Config, logging.Logger) (queries.Adapters, error) {
-	wire.Build(
-		wire.Struct(new(queries.Adapters), "*"),
-
-		badgerRepositoriesSet,
-		formatsSet,
-		extractFromConfigSet,
-		adaptersSet,
-		contentSet,
-	)
-
-	return queries.Adapters{}, nil
-}
-
-// BuildService creates a new service which uses the provided context as a long-term context used as a base context for
-// e.g. established connections.
-func BuildService(context.Context, identity.Private, service.Config) (service.Service, func(), error) {
+func BuildService(identity.Private, service.Config) (service.Service, func(), error) {
 	wire.Build(
 		service.NewService,
 
 		domain.NewPeerManager,
-		wire.Bind(new(commands.NewPeerHandler), new(*domain.PeerManager)),
-		wire.Bind(new(commands.PeerManager), new(*domain.PeerManager)),
+		wire.Bind(new(scuttlegocommands.PeerManager), new(*domain.PeerManager)),
 
 		newBadger,
 
 		newAdvertiser,
 		privateIdentityToPublicIdentity,
 
-		commands.NewMessageBuffer,
-
-		rooms.NewScanner,
-		wire.Bind(new(domain.RoomScanner), new(*rooms.Scanner)),
-
-		rooms.NewPeerRPCAdapter,
-		wire.Bind(new(rooms.MetadataGetter), new(*rooms.PeerRPCAdapter)),
-		wire.Bind(new(rooms.AttendantsGetter), new(*rooms.PeerRPCAdapter)),
+		scuttlegocommands.NewMessageBuffer,
 
 		tunnel.NewDialer,
 		wire.Bind(new(domain.RoomDialer), new(*tunnel.Dialer)),
@@ -105,7 +53,7 @@ func BuildService(context.Context, identity.Private, service.Config) (service.Se
 		portsSet,
 		applicationSet,
 		scuttlegoApplicationSet,
-		replicatorSet,
+		replicationSet,
 		blobReplicatorSet,
 		formatsSet,
 		pubSubSet,
@@ -123,30 +71,107 @@ func BuildService(context.Context, identity.Private, service.Config) (service.Se
 	return service.Service{}, nil, nil
 }
 
-var replicatorSet = wire.NewSet(
-	gossip.NewManager,
-	wire.Bind(new(gossip.ReplicationManager), new(*gossip.Manager)),
+type TestApplication struct {
+	Commands app.Commands
 
-	gossip.NewGossipReplicator,
-	wire.Bind(new(replication.CreateHistoryStreamReplicator), new(*gossip.GossipReplicator)),
-	wire.Bind(new(ebt.SelfCreateHistoryStreamReplicator), new(*gossip.GossipReplicator)),
+	SocialGraphRepository *pubmocks.SocialGraphRepositoryMock
+	InviteRepository      *pubmocks.InviteRespositoryMock
+	FeedRepository        *pubmocks.FeedRepositoryMock
+	Marshaler             *pubmocks.MarshalerMock
+	FeedFormat            *pubmocks.FeedFormatMock
+	LocalIdentity         identity.Private
+	CurrentTimeProvider   *pubmocks.CurrentTimeProviderMock
+}
 
-	ebt.NewReplicator,
-	wire.Bind(new(replication.EpidemicBroadcastTreesReplicator), new(ebt.Replicator)),
+func BuildTestApplication(testing.TB) (TestApplication, error) {
+	wire.Build(
+		wire.Struct(new(TestApplication), "*"),
 
-	replication.NewWantedFeedsCache,
-	wire.Bind(new(gossip.ContactsStorage), new(*replication.WantedFeedsCache)),
-	wire.Bind(new(ebt.ContactsStorage), new(*replication.WantedFeedsCache)),
+		commandsSet,
 
-	ebt.NewSessionTracker,
-	wire.Bind(new(ebt.Tracker), new(*ebt.SessionTracker)),
+		pubmocks.NewMockCommandsTransactionProvider,
+		wire.Bind(new(commands.TransactionProvider), new(*pubmocks.MockCommandsTransactionProvider)),
 
-	ebt.NewSessionRunner,
-	wire.Bind(new(ebt.Runner), new(*ebt.SessionRunner)),
+		wire.Struct(new(commands.Adapters), "*"),
 
-	replication.NewNegotiator,
-	wire.Bind(new(domain.MessageReplicator), new(*replication.Negotiator)),
-)
+		pubmocks.NewSocialGraphRepositoryMock,
+		wire.Bind(new(commands.SocialGraphRepository), new(*pubmocks.SocialGraphRepositoryMock)),
+
+		pubmocks.NewInviteRespositoryMock,
+		wire.Bind(new(commands.InviteRepository), new(*pubmocks.InviteRespositoryMock)),
+
+		pubmocks.NewFeedRepositoryMock,
+		wire.Bind(new(commands.FeedRepository), new(*pubmocks.FeedRepositoryMock)),
+
+		pubmocks.NewCurrentTimeProviderMock,
+		wire.Bind(new(commands.CurrentTimeProvider), new(*pubmocks.CurrentTimeProviderMock)),
+
+		pubmocks.NewMarshalerMock,
+		wire.Bind(new(commands.Marshaler), new(*pubmocks.MarshalerMock)),
+
+		pubmocks.NewFeedFormatMock,
+
+		fixtures.SomePrivateIdentity,
+	)
+
+	return TestApplication{}, nil
+}
+
+func buildBadgerNoTxTxAdapters(*badger.Txn, identity.Public, service.Config, logging.Logger) (notx.TxAdapters, error) {
+	wire.Build(
+		wire.Struct(new(notx.TxAdapters), "*"),
+
+		badgerRepositoriesSet,
+		formatsSet,
+		extractFromConfigSet,
+		adaptersSet,
+		contentSet,
+	)
+
+	return notx.TxAdapters{}, nil
+}
+
+func buildBadgerScuttlegoCommandsAdapters(*badger.Txn, identity.Public, service.Config, logging.Logger) (scuttlegocommands.Adapters, error) {
+	wire.Build(
+		wire.Struct(new(scuttlegocommands.Adapters), "*"),
+
+		badgerRepositoriesSet,
+		formatsSet,
+		extractFromConfigSet,
+		adaptersSet,
+		contentSet,
+	)
+
+	return scuttlegocommands.Adapters{}, nil
+}
+
+func buildBadgerScuttlegoQueriesAdapters(*badger.Txn, identity.Public, service.Config, logging.Logger) (scuttlegoqueries.Adapters, error) {
+	wire.Build(
+		wire.Struct(new(scuttlegoqueries.Adapters), "*"),
+
+		badgerRepositoriesSet,
+		formatsSet,
+		extractFromConfigSet,
+		adaptersSet,
+		contentSet,
+	)
+
+	return scuttlegoqueries.Adapters{}, nil
+}
+
+func buildBadgerPubCommandsAdapters(*badger.Txn, identity.Public, service.Config, logging.Logger) (commands.Adapters, error) {
+	wire.Build(
+		wire.Struct(new(commands.Adapters), "*"),
+
+		badgerRepositoriesSet,
+		formatsSet,
+		extractFromConfigSet,
+		adaptersSet,
+		contentSet,
+	)
+
+	return commands.Adapters{}, nil
+}
 
 func newAdvertiser(l identity.Public, config service.Config) (*local.Advertiser, error) {
 	return local.NewAdvertiser(l, config.ListenAddress)

@@ -3,9 +3,9 @@ package adapters_test
 import (
 	"testing"
 
+	"github.com/planetary-social/scuttlego-pub/internal/fixtures"
 	"github.com/planetary-social/scuttlego-pub/service"
 	"github.com/planetary-social/scuttlego-pub/service/adapters"
-	"github.com/planetary-social/scuttlego/fixtures"
 	"github.com/stretchr/testify/require"
 )
 

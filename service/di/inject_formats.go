@@ -2,6 +2,8 @@ package di
 
 import (
 	"github.com/google/wire"
+	pubcommands "github.com/planetary-social/scuttlego-pub/service/app/commands"
+	pubtransport "github.com/planetary-social/scuttlego-pub/service/domain/messages/transport"
 	"github.com/planetary-social/scuttlego/service/adapters/badger"
 	"github.com/planetary-social/scuttlego/service/app/commands"
 	"github.com/planetary-social/scuttlego/service/domain/feeds"
@@ -17,8 +19,9 @@ var formatsSet = wire.NewSet(
 
 	transport.NewMarshaler,
 	wire.Bind(new(content.Marshaler), new(*transport.Marshaler)),
+	wire.Bind(new(pubcommands.Marshaler), new(*transport.Marshaler)),
 
-	transport.DefaultMappings,
+	pubtransport.Mappings,
 
 	formats.NewRawMessageIdentifier,
 	wire.Bind(new(commands.RawMessageIdentifier), new(*formats.RawMessageIdentifier)),

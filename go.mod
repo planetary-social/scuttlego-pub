@@ -9,7 +9,7 @@ require (
 	github.com/google/wire v0.5.0
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/pelletier/go-toml/v2 v2.0.6
-	github.com/planetary-social/scuttlego v0.0.0-20230217164342-422b735c1d53
+	github.com/planetary-social/scuttlego v0.0.0-20230228224538-cf4c4024ee68
 	github.com/sirupsen/logrus v1.8.1
 	github.com/stretchr/testify v1.8.1
 )
@@ -33,11 +33,14 @@ require (
 	github.com/google/subcommands v1.0.1 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
+	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/karrick/bufpool v1.2.0 // indirect
 	github.com/karrick/gopool v1.2.2 // indirect
 	github.com/keks/persist v0.0.0-20210520094901-9bdd97c1fad2 // indirect
 	github.com/klauspost/compress v1.15.12 // indirect
 	github.com/libp2p/go-reuseport v0.2.0 // indirect
+	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
+	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/ssbc/go-gabbygrove v0.2.2 // indirect

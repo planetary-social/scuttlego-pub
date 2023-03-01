@@ -4,18 +4,19 @@ import (
 	"github.com/dgraph-io/badger/v3"
 	"github.com/google/wire"
 	"github.com/planetary-social/scuttlego-pub/service"
+	pubbadgeradapters "github.com/planetary-social/scuttlego-pub/service/adapters/badger"
+	pubcommands "github.com/planetary-social/scuttlego-pub/service/app/commands"
 	"github.com/planetary-social/scuttlego/logging"
-	badgeradapters "github.com/planetary-social/scuttlego/service/adapters/badger"
+	scuttlegobadgeradapters "github.com/planetary-social/scuttlego/service/adapters/badger"
 	"github.com/planetary-social/scuttlego/service/adapters/badger/notx"
-	"github.com/planetary-social/scuttlego/service/app/commands"
-	"github.com/planetary-social/scuttlego/service/app/queries"
+	scuttlegocommands "github.com/planetary-social/scuttlego/service/app/commands"
+	scuttlegoqueries "github.com/planetary-social/scuttlego/service/app/queries"
 	blobReplication "github.com/planetary-social/scuttlego/service/domain/blobs/replication"
 	"github.com/planetary-social/scuttlego/service/domain/identity"
-	"github.com/planetary-social/scuttlego/service/domain/replication"
 )
 
 var badgerAdaptersSet = wire.NewSet(
-	badgeradapters.NewGarbageCollector,
+	scuttlegobadgeradapters.NewGarbageCollector,
 )
 
 var badgerNoTxRepositoriesSet = wire.NewSet(
@@ -23,57 +24,67 @@ var badgerNoTxRepositoriesSet = wire.NewSet(
 	wire.Bind(new(blobReplication.WantedBlobsProvider), new(*notx.NoTxBlobWantListRepository)),
 	wire.Bind(new(blobReplication.WantListRepository), new(*notx.NoTxBlobWantListRepository)),
 
-	notx.NewNoTxWantedFeedsRepository,
-	wire.Bind(new(replication.WantedFeedsRepository), new(*notx.NoTxWantedFeedsRepository)),
-
 	notx.NewNoTxBlobsRepository,
 	wire.Bind(new(blobReplication.BlobsRepository), new(*notx.NoTxBlobsRepository)),
+
+	notx.NewNoTxFeedWantListRepository,
 )
 
 var badgerRepositoriesSet = wire.NewSet(
-	badgeradapters.NewBanListRepository,
-	wire.Bind(new(commands.BanListRepository), new(*badgeradapters.BanListRepository)),
+	scuttlegobadgeradapters.NewBanListRepository,
+	wire.Bind(new(scuttlegocommands.BanListRepository), new(*scuttlegobadgeradapters.BanListRepository)),
+	wire.Bind(new(scuttlegoqueries.BanListRepository), new(*scuttlegobadgeradapters.BanListRepository)),
 
-	badgeradapters.NewBlobWantListRepository,
-	wire.Bind(new(commands.BlobWantListRepository), new(*badgeradapters.BlobWantListRepository)),
-	wire.Bind(new(blobReplication.WantListRepository), new(*badgeradapters.BlobWantListRepository)),
+	scuttlegobadgeradapters.NewBlobWantListRepository,
+	wire.Bind(new(scuttlegocommands.BlobWantListRepository), new(*scuttlegobadgeradapters.BlobWantListRepository)),
+	wire.Bind(new(blobReplication.WantListRepository), new(*scuttlegobadgeradapters.BlobWantListRepository)),
 
-	badgeradapters.NewFeedWantListRepository,
-	wire.Bind(new(commands.FeedWantListRepository), new(*badgeradapters.FeedWantListRepository)),
+	scuttlegobadgeradapters.NewFeedWantListRepository,
+	wire.Bind(new(scuttlegocommands.FeedWantListRepository), new(*scuttlegobadgeradapters.FeedWantListRepository)),
+	wire.Bind(new(scuttlegoqueries.FeedWantListRepository), new(*scuttlegobadgeradapters.FeedWantListRepository)),
 
-	badgeradapters.NewReceiveLogRepository,
-	wire.Bind(new(commands.ReceiveLogRepository), new(*badgeradapters.ReceiveLogRepository)),
-	wire.Bind(new(queries.ReceiveLogRepository), new(*badgeradapters.ReceiveLogRepository)),
+	scuttlegobadgeradapters.NewReceiveLogRepository,
+	wire.Bind(new(scuttlegocommands.ReceiveLogRepository), new(*scuttlegobadgeradapters.ReceiveLogRepository)),
+	wire.Bind(new(scuttlegoqueries.ReceiveLogRepository), new(*scuttlegobadgeradapters.ReceiveLogRepository)),
 
-	badgeradapters.NewSocialGraphRepository,
-	wire.Bind(new(commands.SocialGraphRepository), new(*badgeradapters.SocialGraphRepository)),
+	scuttlegobadgeradapters.NewSocialGraphRepository,
+	wire.Bind(new(scuttlegocommands.SocialGraphRepository), new(*scuttlegobadgeradapters.SocialGraphRepository)),
+	wire.Bind(new(scuttlegoqueries.SocialGraphRepository), new(*scuttlegobadgeradapters.SocialGraphRepository)),
+	wire.Bind(new(pubcommands.SocialGraphRepository), new(*scuttlegobadgeradapters.SocialGraphRepository)),
 
-	badgeradapters.NewFeedRepository,
-	wire.Bind(new(commands.FeedRepository), new(*badgeradapters.FeedRepository)),
-	wire.Bind(new(queries.FeedRepository), new(*badgeradapters.FeedRepository)),
+	scuttlegobadgeradapters.NewFeedRepository,
+	wire.Bind(new(scuttlegocommands.FeedRepository), new(*scuttlegobadgeradapters.FeedRepository)),
+	wire.Bind(new(scuttlegoqueries.FeedRepository), new(*scuttlegobadgeradapters.FeedRepository)),
+	wire.Bind(new(pubcommands.FeedRepository), new(*scuttlegobadgeradapters.FeedRepository)),
 
-	badgeradapters.NewMessageRepository,
-	wire.Bind(new(queries.MessageRepository), new(*badgeradapters.MessageRepository)),
+	scuttlegobadgeradapters.NewMessageRepository,
+	wire.Bind(new(scuttlegoqueries.MessageRepository), new(*scuttlegobadgeradapters.MessageRepository)),
 
-	badgeradapters.NewWantedFeedsRepository,
-	badgeradapters.NewPubRepository,
-	badgeradapters.NewBlobRepository,
+	scuttlegobadgeradapters.NewPubRepository,
+	scuttlegobadgeradapters.NewBlobRepository,
+
+	pubbadgeradapters.NewInviteRepository,
+	wire.Bind(new(pubcommands.InviteRepository), new(*pubbadgeradapters.InviteRepository)),
 )
 
 var badgerTransactionProviderSet = wire.NewSet(
-	badgeradapters.NewCommandsTransactionProvider,
-	wire.Bind(new(commands.TransactionProvider), new(*badgeradapters.CommandsTransactionProvider)),
+	scuttlegobadgeradapters.NewCommandsTransactionProvider,
+	wire.Bind(new(scuttlegocommands.TransactionProvider), new(*scuttlegobadgeradapters.CommandsTransactionProvider)),
 
-	badgerCommandsAdaptersFactory,
+	badgerScuttlegoCommandsAdaptersFactory,
 
-	badgeradapters.NewQueriesTransactionProvider,
-	wire.Bind(new(queries.TransactionProvider), new(*badgeradapters.QueriesTransactionProvider)),
+	scuttlegobadgeradapters.NewQueriesTransactionProvider,
+	wire.Bind(new(scuttlegoqueries.TransactionProvider), new(*scuttlegobadgeradapters.QueriesTransactionProvider)),
 
-	badgerQueriesAdaptersFactory,
+	badgerScuttlegoQueriesAdaptersFactory,
+
+	pubbadgeradapters.NewCommandsTransactionProvider,
+	wire.Bind(new(pubcommands.TransactionProvider), new(*pubbadgeradapters.CommandsTransactionProvider)),
+
+	badgerPubCommandsAdaptersFactory,
 )
 
 var badgerNoTxTransactionProviderSet = wire.NewSet(
-
 	notx.NewTxAdaptersFactoryTransactionProvider,
 	wire.Bind(new(notx.TransactionProvider), new(*notx.TxAdaptersFactoryTransactionProvider)),
 
@@ -86,14 +97,20 @@ func noTxTxAdaptersFactory(local identity.Public, conf service.Config, logger lo
 	}
 }
 
-func badgerCommandsAdaptersFactory(config service.Config, local identity.Public, logger logging.Logger) badgeradapters.CommandsAdaptersFactory {
-	return func(tx *badger.Txn) (commands.Adapters, error) {
-		return buildBadgerCommandsAdapters(tx, local, config, logger)
+func badgerScuttlegoCommandsAdaptersFactory(config service.Config, local identity.Public, logger logging.Logger) scuttlegobadgeradapters.CommandsAdaptersFactory {
+	return func(tx *badger.Txn) (scuttlegocommands.Adapters, error) {
+		return buildBadgerScuttlegoCommandsAdapters(tx, local, config, logger)
 	}
 }
 
-func badgerQueriesAdaptersFactory(config service.Config, local identity.Public, logger logging.Logger) badgeradapters.QueriesAdaptersFactory {
-	return func(tx *badger.Txn) (queries.Adapters, error) {
-		return buildBadgerQueriesAdapters(tx, local, config, logger)
+func badgerScuttlegoQueriesAdaptersFactory(config service.Config, local identity.Public, logger logging.Logger) scuttlegobadgeradapters.QueriesAdaptersFactory {
+	return func(tx *badger.Txn) (scuttlegoqueries.Adapters, error) {
+		return buildBadgerScuttlegoQueriesAdapters(tx, local, config, logger)
+	}
+}
+
+func badgerPubCommandsAdaptersFactory(config service.Config, local identity.Public, logger logging.Logger) pubbadgeradapters.CommandsAdaptersFactory {
+	return func(tx *badger.Txn) (pubcommands.Adapters, error) {
+		return buildBadgerPubCommandsAdapters(tx, local, config, logger)
 	}
 }
