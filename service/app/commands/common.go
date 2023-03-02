@@ -13,7 +13,7 @@ import (
 )
 
 type TransactionProvider interface {
-	Transact(func(adapters Adapters) error) error
+	Update(func(adapters Adapters) error) error
 }
 
 type Adapters struct {

@@ -12,6 +12,6 @@ func NewMockCommandsTransactionProvider(adapters commands.Adapters) *MockCommand
 	return &MockCommandsTransactionProvider{adapters: adapters}
 }
 
-func (p *MockCommandsTransactionProvider) Transact(f func(adapters commands.Adapters) error) error {
+func (p *MockCommandsTransactionProvider) Update(f func(adapters commands.Adapters) error) error {
 	return f(p.adapters)
 }

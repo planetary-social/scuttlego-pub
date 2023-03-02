@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dgraph-io/badger/v3"
 	"github.com/planetary-social/scuttlego-pub/service/domain"
 	"github.com/planetary-social/scuttlego/service/domain/feeds/message"
 	"github.com/planetary-social/scuttlego/service/domain/identity"
@@ -99,6 +100,36 @@ func SomeRawContent() message.RawContent {
 	return message.MustNewRawContent(someBytes())
 }
 
+func SomeBytesOfLength(n int) []byte {
+	r := make([]byte, n)
+	if _, err := cryptorand.Read(r); err != nil {
+		panic(err)
+	}
+	return r
+}
+
+func Badger(t testing.TB) *badger.DB {
+	dir := Directory(t)
+
+	options := badger.DefaultOptions(dir)
+	options.Logger = nil
+
+	db, err := badger.Open(options)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cleanup := func() {
+		err := db.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Cleanup(cleanup)
+
+	return db
+}
+
 func Directory(t testing.TB) string {
 	name, err := os.MkdirTemp("", "scuttlego-test")
 	if err != nil {
@@ -126,12 +157,4 @@ func randomBase64(bytes int) string {
 
 func someBytes() []byte {
 	return SomeBytesOfLength(10 + rand.Intn(100))
-}
-
-func SomeBytesOfLength(n int) []byte {
-	r := make([]byte, n)
-	if _, err := cryptorand.Read(r); err != nil {
-		panic(err)
-	}
-	return r
 }

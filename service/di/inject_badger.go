@@ -78,8 +78,8 @@ var badgerTransactionProviderSet = wire.NewSet(
 
 	badgerScuttlegoQueriesAdaptersFactory,
 
-	pubbadgeradapters.NewCommandsTransactionProvider,
-	wire.Bind(new(pubcommands.TransactionProvider), new(*pubbadgeradapters.CommandsTransactionProvider)),
+	newCommandsTransactionProvider,
+	wire.Bind(new(pubcommands.TransactionProvider), new(*CommandsTransactionProvider)),
 
 	badgerPubCommandsAdaptersFactory,
 )
@@ -89,6 +89,11 @@ var badgerNoTxTransactionProviderSet = wire.NewSet(
 	wire.Bind(new(notx.TransactionProvider), new(*notx.TxAdaptersFactoryTransactionProvider)),
 
 	noTxTxAdaptersFactory,
+)
+
+var badgerTestTransactionProviderSet = wire.NewSet(
+	newTestTransactionProvider,
+	badgerTestAdaptersFactory,
 )
 
 func noTxTxAdaptersFactory(local identity.Public, conf service.Config, logger logging.Logger) notx.TxAdaptersFactory {
@@ -109,8 +114,32 @@ func badgerScuttlegoQueriesAdaptersFactory(config service.Config, local identity
 	}
 }
 
-func badgerPubCommandsAdaptersFactory(config service.Config, local identity.Public, logger logging.Logger) pubbadgeradapters.CommandsAdaptersFactory {
+func badgerPubCommandsAdaptersFactory(config service.Config, local identity.Public, logger logging.Logger) CommandsAdaptersFactory {
 	return func(tx *badger.Txn) (pubcommands.Adapters, error) {
 		return buildBadgerPubCommandsAdapters(tx, local, config, logger)
 	}
+}
+
+func badgerTestAdaptersFactory() TestAdaptersFactory {
+	return func(tx *badger.Txn) (TestAdapters, error) {
+		return buildBadgerTestAdapters(tx)
+	}
+}
+
+type CommandsAdaptersFactory = pubbadgeradapters.AdaptersFactory[pubcommands.Adapters]
+type CommandsTransactionProvider = pubbadgeradapters.TransactionProvider[pubcommands.Adapters]
+
+func newCommandsTransactionProvider(db *badger.DB, factory CommandsAdaptersFactory) *CommandsTransactionProvider {
+	return pubbadgeradapters.NewTransactionProvider[pubcommands.Adapters](db, factory)
+}
+
+type TestAdaptersFactory = pubbadgeradapters.AdaptersFactory[TestAdapters]
+type TestTransactionProvider = pubbadgeradapters.TransactionProvider[TestAdapters]
+
+func newTestTransactionProvider(db *badger.DB, factory TestAdaptersFactory) *TestTransactionProvider {
+	return pubbadgeradapters.NewTransactionProvider[TestAdapters](db, factory)
+}
+
+type TestAdapters struct {
+	InviteRepository *pubbadgeradapters.InviteRepository
 }
