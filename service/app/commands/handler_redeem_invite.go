@@ -80,7 +80,7 @@ func (h *RedeemInviteHandler) Handle(cmd RedeemInvite) (refs.Message, error) {
 
 	var msgId refs.Message
 
-	if err := h.transaction.Transact(func(adapters Adapters) error {
+	if err := h.transaction.Update(func(adapters Adapters) error {
 		if err := adapters.Invite.Update(cmd.Identity(), func(invite *domain.Invite) error {
 			if err := invite.Redeem(cmd.Identity(), h.currentTimeProvider.Get()); err != nil {
 				return errors.Wrap(err, "error redeeming the invite")

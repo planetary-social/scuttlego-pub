@@ -117,6 +117,21 @@ func BuildTestApplication(testing.TB) (TestApplication, error) {
 	return TestApplication{}, nil
 }
 
+type BadgerTestAdapters struct {
+	TransactionProvider *TestTransactionProvider
+}
+
+func BuildBadgerTestAdapters(testing.TB) (BadgerTestAdapters, error) {
+	wire.Build(
+		wire.Struct(new(BadgerTestAdapters), "*"),
+
+		badgerTestTransactionProviderSet,
+		fixtures.Badger,
+	)
+
+	return BadgerTestAdapters{}, nil
+}
+
 func buildBadgerNoTxTxAdapters(*badger.Txn, identity.Public, service.Config, logging.Logger) (notx.TxAdapters, error) {
 	wire.Build(
 		wire.Struct(new(notx.TxAdapters), "*"),
@@ -171,6 +186,16 @@ func buildBadgerPubCommandsAdapters(*badger.Txn, identity.Public, service.Config
 	)
 
 	return commands.Adapters{}, nil
+}
+
+func buildBadgerTestAdapters(*badger.Txn) (TestAdapters, error) {
+	wire.Build(
+		wire.Struct(new(TestAdapters), "*"),
+
+		badgerRepositoriesSet,
+	)
+
+	return TestAdapters{}, nil
 }
 
 func newAdvertiser(l identity.Public, config service.Config) (*local.Advertiser, error) {
