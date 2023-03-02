@@ -428,7 +428,7 @@ func newBadger(system logging.LoggingSystem, logger logging.Logger, config servi
 
 	return db, func() {
 		if err := db.Close(); err != nil {
-			logger.WithError(err).Error("error closing the database")
+			logger.Error().WithError(err).Message("error closing the database")
 		}
 	}, nil
 
