@@ -1,7 +1,6 @@
 package badger
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"time"
 
@@ -61,7 +60,12 @@ func (i *InviteRepository) load(publicIdentity identity.Public) (*domain.Invite,
 
 	}
 
-	invite, err := domain.NewInviteFromHistory(v.Seed, v.RemainingUses, v.ValidUntil)
+	seed, err := domain.NewSecretKeySeedFromBytes(v.Seed)
+	if err != nil {
+		return nil, errors.Wrap(err, "error creating secret key seed")
+	}
+
+	invite, err := domain.NewInviteFromHistory(seed, v.RemainingUses, v.ValidUntil)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating the invite")
 	}
@@ -97,7 +101,7 @@ func (i *InviteRepository) save(invite *domain.Invite, canExist bool) error {
 }
 
 func (i *InviteRepository) newKey(publicIdentity identity.Public) []byte {
-	return []byte(base64.StdEncoding.EncodeToString(publicIdentity.PublicKey()))
+	return publicIdentity.PublicKey()
 }
 
 func (i *InviteRepository) getInvitesBucket() utils.Bucket {
@@ -107,14 +111,14 @@ func (i *InviteRepository) getInvitesBucket() utils.Bucket {
 }
 
 type persistedInvite struct {
-	RemainingUses *int                 `json:"remaining_uses,omitempty"`
-	ValidUntil    *time.Time           `json:"valid_until,omitempty"`
-	Seed          domain.SecretKeySeed `json:"seed"`
+	RemainingUses *int       `json:"remaining_uses,omitempty"`
+	ValidUntil    *time.Time `json:"valid_until,omitempty"`
+	Seed          []byte     `json:"seed"`
 }
 
 func newPersistedInvite(invite *domain.Invite) *persistedInvite {
 	v := &persistedInvite{
-		Seed: invite.Seed(),
+		Seed: invite.Seed().Bytes(),
 	}
 
 	remainingUses, ok := invite.RemainingUses()
