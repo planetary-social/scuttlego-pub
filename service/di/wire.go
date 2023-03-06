@@ -11,8 +11,8 @@ import (
 	"github.com/dgraph-io/badger/v3"
 	"github.com/google/wire"
 	"github.com/planetary-social/scuttlego-pub/internal/fixtures"
+	"github.com/planetary-social/scuttlego-pub/internal/mocks"
 	"github.com/planetary-social/scuttlego-pub/service"
-	pubmocks "github.com/planetary-social/scuttlego-pub/service/adapters/mocks"
 	"github.com/planetary-social/scuttlego-pub/service/app"
 	"github.com/planetary-social/scuttlego-pub/service/app/commands"
 	"github.com/planetary-social/scuttlego/logging"
@@ -74,13 +74,13 @@ func BuildService(identity.Private, service.Config) (service.Service, func(), er
 type TestApplication struct {
 	Commands app.Commands
 
-	SocialGraphRepository *pubmocks.SocialGraphRepositoryMock
-	InviteRepository      *pubmocks.InviteRespositoryMock
-	FeedRepository        *pubmocks.FeedRepositoryMock
-	Marshaler             *pubmocks.MarshalerMock
-	FeedFormat            *pubmocks.FeedFormatMock
+	SocialGraphRepository *mocks.SocialGraphRepositoryMock
+	InviteRepository      *mocks.InviteRespositoryMock
+	FeedRepository        *mocks.FeedRepositoryMock
+	Marshaler             *mocks.MarshalerMock
+	FeedFormat            *mocks.FeedFormatMock
 	LocalIdentity         identity.Private
-	CurrentTimeProvider   *pubmocks.CurrentTimeProviderMock
+	CurrentTimeProvider   *mocks.CurrentTimeProviderMock
 }
 
 func BuildTestApplication(testing.TB) (TestApplication, error) {
@@ -89,27 +89,27 @@ func BuildTestApplication(testing.TB) (TestApplication, error) {
 
 		commandsSet,
 
-		pubmocks.NewMockCommandsTransactionProvider,
-		wire.Bind(new(commands.TransactionProvider), new(*pubmocks.MockCommandsTransactionProvider)),
+		mocks.NewMockCommandsTransactionProvider,
+		wire.Bind(new(commands.TransactionProvider), new(*mocks.MockCommandsTransactionProvider)),
 
 		wire.Struct(new(commands.Adapters), "*"),
 
-		pubmocks.NewSocialGraphRepositoryMock,
-		wire.Bind(new(commands.SocialGraphRepository), new(*pubmocks.SocialGraphRepositoryMock)),
+		mocks.NewSocialGraphRepositoryMock,
+		wire.Bind(new(commands.SocialGraphRepository), new(*mocks.SocialGraphRepositoryMock)),
 
-		pubmocks.NewInviteRespositoryMock,
-		wire.Bind(new(commands.InviteRepository), new(*pubmocks.InviteRespositoryMock)),
+		mocks.NewInviteRespositoryMock,
+		wire.Bind(new(commands.InviteRepository), new(*mocks.InviteRespositoryMock)),
 
-		pubmocks.NewFeedRepositoryMock,
-		wire.Bind(new(commands.FeedRepository), new(*pubmocks.FeedRepositoryMock)),
+		mocks.NewFeedRepositoryMock,
+		wire.Bind(new(commands.FeedRepository), new(*mocks.FeedRepositoryMock)),
 
-		pubmocks.NewCurrentTimeProviderMock,
-		wire.Bind(new(commands.CurrentTimeProvider), new(*pubmocks.CurrentTimeProviderMock)),
+		mocks.NewCurrentTimeProviderMock,
+		wire.Bind(new(commands.CurrentTimeProvider), new(*mocks.CurrentTimeProviderMock)),
 
-		pubmocks.NewMarshalerMock,
-		wire.Bind(new(commands.Marshaler), new(*pubmocks.MarshalerMock)),
+		mocks.NewMarshalerMock,
+		wire.Bind(new(commands.Marshaler), new(*mocks.MarshalerMock)),
 
-		pubmocks.NewFeedFormatMock,
+		mocks.NewFeedFormatMock,
 
 		fixtures.SomePrivateIdentity,
 	)
